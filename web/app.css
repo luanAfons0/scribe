@@ -262,3 +262,32 @@ h3.section-label { margin-top: 24px; }
   background: var(--surface);
   color: var(--muted);
 }
+
+.jottings-label { display: block; }
+
+.jottings {
+  display: block;
+  width: 100%;
+  min-height: 12em;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: 15px/1.5 var(--mono);
+  resize: vertical;
+}
+
+.jottings:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+/* The Popup is small and has one job: the box fills what the red line leaves. */
+body.popup { display: flex; flex-direction: column; height: 100vh; }
+body.popup .page { display: flex; flex: 1; flex-direction: column; width: 100%; padding: 12px; }
+body.popup .jottings { flex: 1; min-height: 6em; }
+body.popup .jottings-label {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font: 600 13px/1.2 var(--display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

@@ -6,11 +6,18 @@
  * terminal, and as structure, for the Page, which draws it.
  */
 import type { Track } from './audio.ts';
-import { checkCallId, listCalls, recordingCall, viewOf } from './calls.ts';
+import {
+  checkCallId,
+  checkJottings,
+  listCalls,
+  recordingCall,
+  saveJottings,
+  viewOf,
+} from './calls.ts';
 import { badInput } from './mcp.ts';
 import type { Tool, ToolResult } from './mcp.ts';
 import type { Recorder } from './recorder.ts';
-import type { Store } from './store.ts';
+import { within, type Store } from './store.ts';
 import type { Transcriber } from './transcriber.ts';
 
 const ID = { type: 'integer', description: 'The id of the Call, from list_calls.' };
@@ -98,6 +105,26 @@ export function toolsFor({ store, recorder, transcriber }: Parts): readonly Tool
       call: (given) => {
         const id = given['id'] === undefined ? null : checkCallId('stop_call', given['id']);
         return told({ call: recorder.stop(id) });
+      },
+    },
+
+    {
+      name: 'save_jottings',
+      description:
+        'Keep the Jottings of a Call: the whole text, in place of what was there. A line ' +
+        'that starts with # is a heading. Any Call may have its Jottings changed, at any time.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: ID,
+          jottings: { type: 'string', description: 'The whole text of the Jottings.' },
+        },
+        required: ['id', 'jottings'],
+      },
+      call: (given) => {
+        const id = checkCallId('save_jottings', given['id']);
+        const jottings = checkJottings(given['jottings']);
+        return told(within(store, () => saveJottings(store, id, jottings)));
       },
     },
   ];

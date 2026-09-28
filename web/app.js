@@ -19,6 +19,7 @@ const callTitle = byId('call-title');
 const callMeta = byId('call-meta');
 const stopButton = byId('stop');
 const cutNote = byId('cut-note');
+const jottingsBox = byId('call-jottings');
 const transcript = byId('transcript');
 const transcribing = byId('transcribing');
 const noTranscript = byId('no-transcript');
@@ -28,6 +29,9 @@ const POLL_MS = 2000;
 
 /** The Call this tab records, while it records one. */
 let capture = null;
+
+/** The Jottings box, which follows the Call shown. */
+const jottings = keepJottings(jottingsBox, say);
 
 /** Say what went wrong at the top of the page, or clear it with null. */
 function say(fault) {
@@ -100,6 +104,7 @@ async function showCall(id) {
   callView.dataset.state = found.state;
   stopButton.hidden = found.state !== 'recording';
   cutNote.hidden = found.state !== 'cut';
+  jottings.show(found.id, found.jottings);
 
   transcript.replaceChildren(
     ...found.transcript.map((line) => {
