@@ -51,9 +51,14 @@ export function transcriberFor(
       return;
     }
     running = true;
-    hear(settings, window).then(
+    // A Call deleted while its windows waited has no audio left to read, and
+    // one deleted while Whisper read it took the file away: neither is news.
+    const gone = (): boolean =>
+      store.prepare('SELECT 1 FROM calls WHERE id = ?').get(window.callId) === undefined;
+    (gone() ? Promise.resolve([]) : hear(settings, window)).then(
       (lines) => keep(store, window, lines),
       (fault) => {
+        if (gone()) return;
         process.stderr.write(
           `scribe: whisper.cpp could not read a window of Call ${window.callId}: ` +
             `${sentenceFor(fault)}\n`,

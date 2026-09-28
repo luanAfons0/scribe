@@ -6,12 +6,18 @@
  * terminal, and as structure, for the Page, which draws it.
  */
 import type { Track } from './audio.ts';
+import { forgetCall } from './audio.ts';
 import {
   checkCallId,
   checkJottings,
+  checkMinutes,
+  checkTitle,
+  deleteCall,
   listCalls,
   recordingCall,
+  renameCall,
   saveJottings,
+  saveMinutes,
   viewOf,
 } from './calls.ts';
 import { badInput } from './mcp.ts';
@@ -140,6 +146,58 @@ export function toolsFor({ store, recorder, transcriber, maker }: Parts): readon
         'get_call shows minutesState "made", or "failed" with minutesError.',
       inputSchema: { type: 'object', properties: { id: ID }, required: ['id'] },
       call: (given) => told({ call: maker.make(checkCallId('make_minutes', given['id'])) }),
+    },
+
+    {
+      name: 'rename_call',
+      description:
+        'Give a Call a title of your own. It replaces the date and time, or the title the ' +
+        'Minutes proposed, and no Minutes made later replace it.',
+      inputSchema: {
+        type: 'object',
+        properties: { id: ID, title: { type: 'string', description: 'One line.' } },
+        required: ['id', 'title'],
+      },
+      call: (given) => {
+        const id = checkCallId('rename_call', given['id']);
+        const title = checkTitle(given['title']);
+        return told({ call: within(store, () => renameCall(store, id, title)) });
+      },
+    },
+
+    {
+      name: 'save_minutes',
+      description:
+        'Keep Minutes written or corrected by hand, as Markdown, in place of what was there. ' +
+        'The Transcript cannot be changed; it is the record of the Call.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: ID,
+          minutes: { type: 'string', description: 'The Minutes, as Markdown.' },
+        },
+        required: ['id', 'minutes'],
+      },
+      call: (given) => {
+        const id = checkCallId('save_minutes', given['id']);
+        const minutes = checkMinutes(given['minutes']);
+        within(store, () => saveMinutes(store, id, minutes));
+        return told({ call: view(id) });
+      },
+    },
+
+    {
+      name: 'delete_call',
+      description:
+        'Delete a Call for good, with its Jottings, its Transcript, its Minutes and any audio ' +
+        'of it that waits for Whisper. A Call that records must be stopped first.',
+      inputSchema: { type: 'object', properties: { id: ID }, required: ['id'] },
+      call: (given) => {
+        const id = checkCallId('delete_call', given['id']);
+        const deleted = within(store, () => deleteCall(store, id));
+        forgetCall(id);
+        return told(deleted);
+      },
     },
   ];
 }

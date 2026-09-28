@@ -141,6 +141,19 @@ With no command set, recording and the Transcript still work. Only Make Minutes
 is refused, with a sentence that names `SCRIBE_MINUTES_COMMAND`. A command that
 fails leaves the Minutes failed, with the last line it said on stderr.
 
+### Find a Call again
+
+The Plugin Page lists every Call, newest first, with its title, date, length
+and state. Open one to read its Minutes and its Transcript. From there:
+
+- **Rename** gives it a title of your own. Minutes made later keep it.
+- **Edit** corrects the Minutes by hand, as Markdown.
+- **Delete** removes the Call with its Jottings, Transcript and Minutes, and
+  any of its audio that still waits for Whisper. Nothing of it stays in the
+  Plugin's directory.
+
+The Transcript cannot be edited: it is the record of the Call.
+
 ### Jottings in the Popup
 
 Bind a FirstMate Shortcut to scribe's Popup page once, and restart the Host:

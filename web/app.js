@@ -13,7 +13,7 @@ const liveStop = byId('live-stop');
 const listView = byId('list-view');
 const callView = byId('call-view');
 const startButton = byId('start');
-const calls = byId('calls');
+const callList = byId('calls');
 const noCalls = byId('no-calls');
 const callTitle = byId('call-title');
 const callMeta = byId('call-meta');
@@ -23,6 +23,15 @@ const jottingsBox = byId('call-jottings');
 const makeButton = byId('make-minutes');
 const minutesState = byId('minutes-state');
 const minutesView = byId('minutes');
+const renameButton = byId('rename');
+const renameForm = byId('rename-form');
+const titleInput = byId('title-input');
+const renameCancel = byId('rename-cancel');
+const deleteButton = byId('delete');
+const editButton = byId('edit-minutes');
+const minutesForm = byId('minutes-form');
+const minutesEditor = byId('minutes-editor');
+const minutesCancel = byId('minutes-cancel');
 const transcript = byId('transcript');
 const transcribing = byId('transcribing');
 const noTranscript = byId('no-transcript');
@@ -77,7 +86,7 @@ function shownId() {
 
 async function showList() {
   const listed = await call('list_calls');
-  calls.replaceChildren(
+  callList.replaceChildren(
     ...listed.calls.map((found) => {
       const item = document.createElement('li');
       item.className = 'call ' + found.state;
@@ -88,8 +97,10 @@ async function showList() {
       name.textContent = nameOf(found);
       const meta = document.createElement('span');
       meta.className = 'call-meta';
+      // An untitled Call is named by its date already, so it is not said twice.
       meta.textContent =
-        when(found.startedAt) + ' · ' + lengthOf(found) + ' · ' + STATE_WORDS[found.state];
+        (found.title ? when(found.startedAt) + ' · ' : '') +
+        lengthOf(found) + ' · ' + STATE_WORDS[found.state];
       link.append(name, meta);
       item.append(link);
       return item;
@@ -106,6 +117,8 @@ async function showCall(id) {
     when(found.startedAt) + ' · ' + lengthOf(found) + ' · ' + STATE_WORDS[found.state];
   callView.dataset.state = found.state;
   stopButton.hidden = found.state !== 'recording';
+  deleteButton.hidden = found.state === 'recording';
+  callView.dataset.title = found.title || '';
   cutNote.hidden = found.state !== 'cut';
   jottings.show(found.id, found.jottings);
 
@@ -156,7 +169,9 @@ function showMinutes(found) {
   minutesState.textContent = state;
   minutesState.hidden = state === '' || (found.minutesState === 'none' && found.minutes !== null);
   minutesState.classList.toggle('fault', found.minutesState === 'failed');
-  makeButton.hidden = !over;
+  makeButton.hidden = !over || !minutesForm.hidden;
+  editButton.hidden = !over || !minutesForm.hidden || found.minutesState === 'making';
+  minutesView.hidden = minutesView.hidden || !minutesForm.hidden;
   makeButton.disabled = found.transcribing || found.minutesState === 'making';
   makeButton.textContent = found.minutes === null ? 'Make Minutes' : 'Make Minutes again';
 }
@@ -233,6 +248,72 @@ async function stop(id) {
   }
   show();
 }
+
+/** Show the title as a field to type in, or as the heading again. */
+function renaming(on) {
+  renameForm.hidden = !on;
+  callTitle.hidden = on;
+  renameButton.hidden = on;
+  if (on) {
+    titleInput.value = callView.dataset.title || callTitle.textContent;
+    titleInput.focus();
+    titleInput.select();
+  }
+}
+
+renameButton.addEventListener('click', () => renaming(true));
+renameCancel.addEventListener('click', () => renaming(false));
+renameForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  try {
+    await call('rename_call', { id: shownId(), title: titleInput.value });
+    renaming(false);
+  } catch (fault) {
+    say(fault);
+  }
+  show();
+});
+
+/** Show the Minutes' Markdown in a box to correct by hand, or put it away. */
+function editing(on) {
+  minutesForm.hidden = !on;
+  if (on) {
+    minutesEditor.value = minutesView.dataset.source || '';
+    minutesEditor.focus();
+  }
+  show();
+}
+
+editButton.addEventListener('click', () => editing(true));
+minutesCancel.addEventListener('click', () => editing(false));
+minutesForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  try {
+    await call('save_minutes', { id: shownId(), minutes: minutesEditor.value });
+    editing(false);
+  } catch (fault) {
+    say(fault);
+  }
+});
+
+deleteButton.addEventListener('click', async () => {
+  const name = callTitle.textContent;
+  const sure = confirm(
+    'Delete “' + name + '” for good, with its Jottings, Transcript and Minutes?',
+  );
+  if (!sure) return;
+  try {
+    await call('delete_call', { id: shownId() });
+    location.hash = '#';
+  } catch (fault) {
+    say(fault);
+  }
+});
+
+window.addEventListener('hashchange', () => {
+  renaming(false);
+  minutesForm.hidden = true;
+});
 
 startButton.addEventListener('click', start);
 makeButton.addEventListener('click', makeMinutes);
