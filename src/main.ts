@@ -9,21 +9,25 @@
  * Index Page shows; the journal is for what went wrong.
  */
 import { sentenceFor, serve } from './mcp.ts';
+import { recorderFor } from './recorder.ts';
 import { readSettings } from './settings.ts';
 import { openStore } from './store.ts';
 import { toolsFor } from './tools.ts';
+import { transcriberFor } from './transcriber.ts';
 
 // A missing whisper.cpp, a missing model, or a file that cannot be opened is
 // one sentence and a non-zero exit: the Index Page shows the Plugin Stopped
 // and the journal carries the reason. The Host does not start it again.
-const store = (() => {
+const { settings, store } = (() => {
   try {
-    readSettings();
-    return openStore();
+    return { settings: readSettings(), store: openStore() };
   } catch (fault) {
     process.stderr.write(`scribe: ${sentenceFor(fault)}\n`);
     return process.exit(1);
   }
 })();
 
-serve(toolsFor(store));
+const transcriber = transcriberFor(store, settings, () => {});
+const recorder = recorderFor(store, transcriber, settings);
+
+serve(toolsFor({ store, recorder, transcriber }));

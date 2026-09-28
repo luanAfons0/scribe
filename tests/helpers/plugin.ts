@@ -85,6 +85,8 @@ export type Started = {
   ended(within?: number): Promise<Ending>;
   /** Close stdin, which is how the Host asks a Plugin Server to stop. */
   stop(): void;
+  /** Kill the Plugin Server outright, as a crash would. */
+  kill(): void;
 };
 
 /** A temporary Plugin directory for one test, removed when the test ends. */
@@ -213,6 +215,7 @@ export async function startPluginServer(
         ),
       ]),
     stop: () => child.stdin!.end(),
+    kill: () => child.kill('SIGKILL'),
   };
 }
 

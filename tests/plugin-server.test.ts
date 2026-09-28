@@ -14,7 +14,7 @@ import {
 } from './helpers/plugin.ts';
 
 /** Every tool scribe ships. The names are the contract with the Page. */
-const TOOLS = ['list_calls'];
+const TOOLS = ['append_audio', 'get_call', 'list_calls', 'start_call', 'stop_call'];
 
 test('the Plugin Server answers the handshake', async (t) => {
   const plugin = await startPluginServer(t);
