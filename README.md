@@ -120,22 +120,36 @@ command again, for example after you edit the Jottings, and on a Cut Call it
 is how you get Minutes at all.
 
 scribe knows no model and holds no key (ADR-0002). Any command that reads a
-prompt on stdin and prints text will do. **Use a local model**, through
-[Ollama](https://ollama.com):
+prompt on stdin and prints text will do.
+
+**The command this project uses is Claude Code in print mode:**
 
 ```ini
-Environment=SCRIBE_MINUTES_COMMAND=/usr/local/bin/ollama run <model>
+Environment="SCRIBE_MINUTES_COMMAND=/home/you/.local/bin/claude -p --tools \"\" --setting-sources \"\" --no-session-persistence --model sonnet"
 ```
 
-The recommended model is still to be chosen on a real Call (scribe#7).
+Why each part is there:
 
-> **A cloud CLI sends the Transcript off this machine.** `claude -p` or
-> `codex exec -` work as the command, but every word of the Call then goes to
-> that service. The local path is the documented one.
+- `-p` reads the prompt on stdin and prints the answer.
+- `--tools ""` gives it no tools: it only writes.
+- `--setting-sources ""` loads no settings and no `CLAUDE.md`, so your own
+  instructions (a rule to answer in English, say) do not change the Minutes.
+- `--no-session-persistence` keeps no session of the Call on disk.
+- `--model sonnet` wrote clear Portuguese Minutes, with the headings kept and
+  a good title, from a 90-second Transcript in under a minute.
 
-The command runs under the Host's service, whose `PATH` has no nvm. A command
-installed through nvm (`claude`, `codex`) needs its absolute path, such as
-`/home/you/.nvm/versions/node/v24.15.0/bin/claude -p`.
+It uses the login `claude` already has, so there is no key to set.
+
+> **This sends the Transcript off this machine.** The audio stays here, but
+> the Jottings and every word of the Transcript go to Anthropic when the
+> Minutes are made. For a Call that must stay local, use a local model
+> instead, through [Ollama](https://ollama.com):
+> `SCRIBE_MINUTES_COMMAND=/usr/local/bin/ollama run <model>`. The same holds
+> for any other cloud CLI, such as `codex exec -`.
+
+The command runs under the Host's service, whose `PATH` has no nvm and no
+`~/.local/bin`. Give the command its absolute path: a command installed
+through nvm needs one too, such as `/home/you/.nvm/versions/node/v24.15.0/bin/codex`.
 
 With no command set, recording and the Transcript still work. Only Make Minutes
 is refused, with a sentence that names `SCRIBE_MINUTES_COMMAND`. A command that

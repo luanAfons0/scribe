@@ -102,6 +102,19 @@ test('silence is never given to Whisper, which would make words up', async (t) =
   assert.deepEqual(await audioIn(plugin.directory), []);
 });
 
+test('a line that is only a sound in brackets is not kept', async (t) => {
+  const plugin = await startedAndShaken(t);
+  const id = await startCall(plugin);
+
+  await send(plugin, id, 'tab', pcm([
+    { seconds: 1, level: 1111 }, { seconds: 1 }, { seconds: 1, level: 3000 },
+  ]));
+  await plugin.call('stop_call', { id });
+  const call = await transcribed(plugin, id);
+
+  assert.deepEqual(said(call), ['2000 Outros: tone 3000']);
+});
+
 test('Whisper is asked for Portuguese, greedy, with the model the settings name', async (t) => {
   const log = join(await makeDirectory(t), 'whisper.log');
   const plugin = await startedAndShaken(t, { env: { SCRIBE_TEST_WHISPER_LOG: log } });
@@ -116,6 +129,7 @@ test('Whisper is asked for Portuguese, greedy, with the model the settings name'
   assert.equal(after('-l'), 'pt');
   assert.equal(after('-bs'), '1');
   assert.equal(after('-bo'), '1');
+  assert.ok(args.includes('-sns'), 'non-speech tokens are not suppressed');
   assert.ok(after('-m')?.endsWith('model.bin'), args.join(' '));
 });
 

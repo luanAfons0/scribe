@@ -6,8 +6,10 @@ command's stdin, and reads the Minutes from its stdout. scribe knows no model,
 holds no key and has no default command.
 
 Any tool that reads a prompt and prints text will do: a local model through
-`ollama run`, or a cloud CLI. The README recommends a local one, and warns that
-a cloud CLI sends the Transcript off this machine.
+`ollama run`, or a cloud CLI. The operator chose Claude Code in print mode
+(`claude -p`), and the README says so, with a warning that it sends the
+Jottings and the Transcript off this machine and the local command to use
+instead. The audio never leaves.
 
 ## Consequences
 
