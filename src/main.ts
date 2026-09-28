@@ -9,6 +9,7 @@
  * Index Page shows; the journal is for what went wrong.
  */
 import { sentenceFor, serve } from './mcp.ts';
+import { minutesMakerFor, type MinutesMaker } from './minutes-maker.ts';
 import { recorderFor } from './recorder.ts';
 import { readSettings } from './settings.ts';
 import { openStore } from './store.ts';
@@ -27,7 +28,13 @@ const { settings, store } = (() => {
   }
 })();
 
-const transcriber = transcriberFor(store, settings, () => {});
-const recorder = recorderFor(store, transcriber, settings);
+// Whisper tells the MinutesMaker when a Call is heard, and the MinutesMaker
+// asks Whisper whether it is: the one is made before the other, and each
+// reaches the other through a function.
+let maker: MinutesMaker | null = null;
+const heard = (id: number): void => maker?.heard(id);
+const transcriber = transcriberFor(store, settings, heard);
+maker = minutesMakerFor(store, settings, (id) => transcriber.busyWith(id));
+const recorder = recorderFor(store, transcriber, settings, heard);
 
-serve(toolsFor({ store, recorder, transcriber }));
+serve(toolsFor({ store, recorder, transcriber, maker }));

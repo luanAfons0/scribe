@@ -54,6 +54,16 @@
       What Whisper heard until then is kept.
     </p>
 
+    <div class="mast minutes-mast">
+      <h3 class="section-label">Minutes</h3>
+      <div class="acts">
+        <button class="act" id="make-minutes" type="button" hidden>Make Minutes</button>
+      </div>
+    </div>
+    <p class="empty" id="minutes-state" hidden></p>
+    <!-- The Minutes as Markdown, drawn by markdown.js: escaped first, always. -->
+    <article class="minutes" id="minutes" hidden></article>
+
     <h3 class="section-label"><label for="call-jottings">Jottings</label></h3>
     <textarea class="jottings" id="call-jottings" spellcheck="true"
       placeholder="Type as the call goes. A line that starts with # is a heading."></textarea>
@@ -65,6 +75,7 @@
   </section>
 </main>
 <script src="rpc.js"></script>
+<script src="markdown.js"></script>
 <script src="jottings.js"></script>
 <script src="capture.js"></script>
 <script src="app.js"></script>

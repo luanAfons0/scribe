@@ -62,6 +62,8 @@ src/           the Plugin Server. Every file is one job.
   recorder.ts  the Call that records: its tracks, its chunks, and its Cut.
   transcriber.ts the windows, given to whisper.cpp one at a time, and the
                Transcript lines it heard.
+  minutes.ts   the prompt, the Minutes command, and the title it proposes.
+  minutes-maker.ts when the Minutes are made: after Stop, and on request.
   tools.ts     the tools this Plugin ships, for the Page and the Popup.
   mcp.ts       the one connection to the Host: MCP over stdio.
 web/           the Plugin Page, as the Host serves it.
@@ -71,11 +73,12 @@ web/           the Plugin Page, as the Host serves it.
   popup.html   the Popup a Shortcut opens: the red line, Jottings, Stop.
   popup.js     what drives it, from get_call with no id.
   jottings.js  keepJottings(): the box that keeps every change at once.
+  markdown.js  the small Markdown renderer for the Minutes, as Worklog's.
   capture.js   startCapture(): the tab and the mic, sent in chunks (ADR-0001).
   pcm-tap.js   the AudioWorklet that cuts a track into 16-bit PCM chunks.
   app.css      the one stylesheet.
 tests/         one file per behaviour, plus helpers/ and fixtures/.
-  fixtures/    whisper, a fixture whisper.cpp, and the files it needs.
+  fixtures/    whisper and minutes, fixture executables, and model.bin.
 docs/adr/      the decisions that are expensive to reverse.
 docs/agents/   how an agent works in this repo. See "Agent skills" below.
 ```

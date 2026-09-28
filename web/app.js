@@ -20,6 +20,9 @@ const callMeta = byId('call-meta');
 const stopButton = byId('stop');
 const cutNote = byId('cut-note');
 const jottingsBox = byId('call-jottings');
+const makeButton = byId('make-minutes');
+const minutesState = byId('minutes-state');
+const minutesView = byId('minutes');
 const transcript = byId('transcript');
 const transcribing = byId('transcribing');
 const noTranscript = byId('no-transcript');
@@ -125,7 +128,47 @@ async function showCall(id) {
   );
   transcribing.hidden = !found.transcribing;
   noTranscript.hidden = found.transcript.length > 0 || found.transcribing;
-  return found.state === 'recording' || found.transcribing;
+  showMinutes(found);
+  return found.state === 'recording' || found.transcribing || found.minutesState === 'making';
+}
+
+/** What a Call's Minutes say, or where they stand. */
+const MINUTES_WORDS = {
+  none: 'No Minutes yet.',
+  making: 'Making the Minutes…',
+};
+
+function showMinutes(found) {
+  const over = found.state !== 'recording';
+  minutesView.hidden = found.minutes === null;
+  if (found.minutes !== null && minutesView.dataset.source !== found.minutes) {
+    minutesView.innerHTML = renderMarkdown(found.minutes);
+    minutesView.dataset.source = found.minutes;
+  }
+  const state =
+    found.minutesState === 'failed'
+      ? 'The Minutes could not be made: ' + found.minutesError
+      : found.state === 'recording'
+        ? 'The Minutes are made when the Call stops.'
+        : found.transcribing && found.minutesState === 'none'
+          ? 'The Minutes are made once Whisper has read all the audio.'
+          : MINUTES_WORDS[found.minutesState] || '';
+  minutesState.textContent = state;
+  minutesState.hidden = state === '' || (found.minutesState === 'none' && found.minutes !== null);
+  minutesState.classList.toggle('fault', found.minutesState === 'failed');
+  makeButton.hidden = !over;
+  makeButton.disabled = found.transcribing || found.minutesState === 'making';
+  makeButton.textContent = found.minutes === null ? 'Make Minutes' : 'Make Minutes again';
+}
+
+async function makeMinutes() {
+  makeButton.disabled = true;
+  try {
+    await call('make_minutes', { id: shownId() });
+  } catch (fault) {
+    say(fault);
+  }
+  show();
 }
 
 /** The red line, from the Call that records now, if one does. */
@@ -192,6 +235,7 @@ async function stop(id) {
 }
 
 startButton.addEventListener('click', start);
+makeButton.addEventListener('click', makeMinutes);
 stopButton.addEventListener('click', () => stop(shownId()));
 liveStop.addEventListener('click', () => stop(Number(live.dataset.id)));
 window.addEventListener('hashchange', show);

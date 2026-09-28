@@ -32,7 +32,12 @@ test('a Call fed on both tracks and stopped has Eu and Outros lines in time orde
   const plugin = await startedAndShaken(t);
   const id = await startCall(plugin);
 
-  await send(plugin, id, 'mic', pcm([{ seconds: 1, level: 3000 }, { seconds: 3 }, { seconds: 1, level: 5000 }]));
+  await send(
+    plugin,
+    id,
+    'mic',
+    pcm([{ seconds: 1, level: 3000 }, { seconds: 3 }, { seconds: 1, level: 5000 }]),
+  );
   await send(plugin, id, 'tab', pcm([{ seconds: 2 }, { seconds: 1, level: 4000 }, { seconds: 2 }]));
   await plugin.call('stop_call', { id });
   const call = await transcribed(plugin, id);
@@ -192,7 +197,10 @@ test('a tool call that carries five seconds of audio is well under the Host’s 
     jsonrpc: '2.0',
     id: 1,
     method: 'tools/call',
-    params: { name: 'append_audio', arguments: { id: 1, track: 'mic', seq: 0, pcm: loud.toString('base64') } },
+    params: {
+      name: 'append_audio',
+      arguments: { id: 1, track: 'mic', seq: 0, pcm: loud.toString('base64') },
+    },
   });
 
   assert.ok(Buffer.byteLength(body) < 300_000, `the call is ${Buffer.byteLength(body)} bytes`);

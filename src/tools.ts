@@ -16,6 +16,7 @@ import {
 } from './calls.ts';
 import { badInput } from './mcp.ts';
 import type { Tool, ToolResult } from './mcp.ts';
+import type { MinutesMaker } from './minutes-maker.ts';
 import type { Recorder } from './recorder.ts';
 import { within, type Store } from './store.ts';
 import type { Transcriber } from './transcriber.ts';
@@ -27,10 +28,11 @@ export type Parts = {
   readonly store: Store;
   readonly recorder: Recorder;
   readonly transcriber: Transcriber;
+  readonly maker: MinutesMaker;
 };
 
 /** The tools, over the parts of one running Plugin Server. */
-export function toolsFor({ store, recorder, transcriber }: Parts): readonly Tool[] {
+export function toolsFor({ store, recorder, transcriber, maker }: Parts): readonly Tool[] {
   const view = (id: number) => viewOf(store, id, transcriber.busyWith(id));
 
   return [
@@ -52,7 +54,9 @@ export function toolsFor({ store, recorder, transcriber }: Parts): readonly Tool
         required: [],
       },
       call: (given) => {
-        if (given['id'] !== undefined) return told({ call: view(checkCallId('get_call', given['id'])) });
+        if (given['id'] !== undefined) {
+          return told({ call: view(checkCallId('get_call', given['id'])) });
+        }
         const running = recordingCall(store);
         return told({ call: running === null ? null : view(running.id) });
       },
@@ -126,6 +130,16 @@ export function toolsFor({ store, recorder, transcriber }: Parts): readonly Tool
         const jottings = checkJottings(given['jottings']);
         return told(within(store, () => saveJottings(store, id, jottings)));
       },
+    },
+
+    {
+      name: 'make_minutes',
+      description:
+        'Make the Minutes of a Call again, from its Jottings and its Transcript, with the ' +
+        'command in SCRIBE_MINUTES_COMMAND. It starts the work and answers the Call at once; ' +
+        'get_call shows minutesState "made", or "failed" with minutesError.',
+      inputSchema: { type: 'object', properties: { id: ID }, required: ['id'] },
+      call: (given) => told({ call: maker.make(checkCallId('make_minutes', given['id'])) }),
     },
   ];
 }

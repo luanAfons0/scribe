@@ -70,6 +70,7 @@ export function recorderFor(
   store: Store,
   transcriber: Transcriber,
   settings: Pick<Settings, 'cutAfterMs'>,
+  heard: (callId: number) => void,
 ): Recorder {
   let live: Live | null = null;
 
@@ -82,9 +83,15 @@ export function recorderFor(
     }
   };
 
+  /** Give Whisper all a Call has left; when that is nothing, it is heard. */
+  const finish = (callId: number): void => {
+    for (const track of TRACKS) flush(callId, track, true);
+    if (!transcriber.busyWith(callId)) heard(callId);
+  };
+
   const cut = (callId: number): void => {
     within(store, () => endCall(store, callId, 'cut'));
-    for (const track of TRACKS) flush(callId, track, true);
+    finish(callId);
   };
 
   // What the last run left: a Call that records with nobody sending, windows
@@ -150,7 +157,7 @@ export function recorderFor(
       }
       const ended = within(store, () => endCall(store, running.id, 'ended'));
       live = null;
-      for (const track of TRACKS) flush(ended.id, track, true);
+      finish(ended.id);
       return ended;
     },
   };
