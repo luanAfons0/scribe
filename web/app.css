@@ -1,0 +1,126 @@
+/* The scribe Plugin Page. One stylesheet, no build step, no framework and no
+   web font: the Host serves these bytes unchanged (FirstMate ADR-0008), so
+   what is here is what a browser gets.
+
+   Paper and ink, with one colour kept for one job: red means a Call is
+   recording, and nothing else on the page is red. Every colour is a token on
+   :root and is redefined once for dark, so a rule below names a role and
+   never a hex. The faces are the ones Windows already has, because the
+   FirstMate window runs there, and each falls back to what the system has. */
+
+:root {
+  color-scheme: light dark;
+
+  --canvas: #eef0f2;
+  --surface: #fbfcfc;
+  --sunken: #e2e6e9;
+  --ink: #15202b;
+  --muted: #56636f;
+  --faint: #86929c;
+  --line: #cbd3d9;
+
+  --accent: #1f4f7a;
+  --accent-ink: #ffffff;
+  --live: #c62828;
+  --live-soft: #fbe3e1;
+  --cut: #9a6b00;
+
+  --display: Bahnschrift, 'DIN Alternate', 'Roboto Condensed', 'Arial Narrow', system-ui,
+    sans-serif;
+  --sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --mono: 'Cascadia Mono', Consolas, ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: #0e141a;
+    --surface: #161e26;
+    --sunken: #0b1015;
+    --ink: #e3e9ee;
+    --muted: #9dabb6;
+    --faint: #697784;
+    --line: #28343f;
+
+    --accent: #8dbbe2;
+    --accent-ink: #0b1826;
+    --live: #ff6b5e;
+    --live-soft: rgba(255, 107, 94, 0.14);
+    --cut: #e0b04a;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font: 15px/1.5 var(--sans);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 600 18px/1 var(--display);
+  letter-spacing: 0.02em;
+}
+
+.mark {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+}
+
+.page {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.banner {
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--live);
+  border-radius: var(--radius);
+  background: var(--live-soft);
+  color: var(--ink);
+}
+
+.section-label {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font: 600 13px/1.2 var(--display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.calls {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.call {
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.call + .call { margin-top: 6px; }
+
+.empty { color: var(--faint); }

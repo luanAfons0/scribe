@@ -1,0 +1,30 @@
+# The one command AGENTS.md already names, run by a machine on every change.
+#
+# There is no build step, because Node 24 runs the TypeScript directly and
+# ships node:sqlite. Every test spawns the real Plugin Server
+# against a temporary Plugin directory, with fixture executables for whisper.cpp
+# and the Minutes command, or reads web/ off disk, so nothing here needs a Host,
+# a model or a running FirstMate.
+name: Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    name: Types and tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run check

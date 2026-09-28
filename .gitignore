@@ -1,0 +1,14 @@
+node_modules/
+
+# An agent's worktrees.
+.claude/
+
+# The Plugin's own data. When this repository is also the Plugin directory the
+# Host runs, this is this machine's Calls, not the project's.
+scribe.db
+scribe.db-journal
+scribe.db-wal
+scribe.db-shm
+
+# Audio that waits for Whisper. It lives only until its window is transcribed.
+audio/

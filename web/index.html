@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>scribe</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="bar">
+  <div class="brand"><span class="mark" aria-hidden="true"></span><span>scribe</span></div>
+</header>
+<main class="page">
+  <!-- What is wrong, when something is. Empty and invisible otherwise. -->
+  <div id="banner" class="banner" role="alert" hidden></div>
+
+  <section id="list-view">
+    <h2 class="section-label">Calls</h2>
+    <!-- Written by app.js out of what list_calls answered, newest first. -->
+    <ol class="calls" id="calls"></ol>
+    <p class="empty" id="no-calls" hidden>No Calls yet.</p>
+  </section>
+</main>
+<script src="rpc.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

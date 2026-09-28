@@ -1,0 +1,23 @@
+# The Minutes come from a command
+
+scribe makes the Minutes by running the command in `SCRIBE_MINUTES_COMMAND`.
+It writes the prompt — the Jottings, the Transcript and the rules — to the
+command's stdin, and reads the Minutes from its stdout. scribe knows no model,
+holds no key and has no default command.
+
+Any tool that reads a prompt and prints text will do: a local model through
+`ollama run`, or a cloud CLI. The README recommends a local one, and warns that
+a cloud CLI sends the Transcript off this machine.
+
+## Consequences
+
+With no command set, or one that is not found, a Call still records and its
+Transcript is still made. Only Make Minutes is refused, with a sentence that
+names `SCRIBE_MINUTES_COMMAND`.
+
+The choice of model is the operator's and can change without a change to
+scribe. When FirstMate has Sampling, scribe may ask the Host for a model
+instead; this decision does not wait for it.
+
+A command installed through nvm is not on the Host's service PATH, so it needs
+its absolute path.

@@ -1,0 +1,46 @@
+#!/usr/bin/env node
+// A fixture whisper.cpp: it takes the arguments scribe gives the real one and
+// prints lines the way whisper-cli prints them, so a test can tell what was
+// heard, and when, without a model.
+//
+// It reads the WAV named by -f and prints one line for each run of loud
+// audio, as "[start --> end]  tone <level>", where level is the loudest sample
+// of the run. A test writes a tone of a level it picks where it wants a line.
+import { readFileSync, appendFileSync } from 'node:fs';
+
+const args = process.argv.slice(2);
+const at = (flag) => args[args.indexOf(flag) + 1];
+if (process.env.SCRIBE_TEST_WHISPER_LOG) {
+  appendFileSync(process.env.SCRIBE_TEST_WHISPER_LOG, `${JSON.stringify(args)}\n`);
+}
+
+const wav = readFileSync(at('-f'));
+const samples = new Int16Array(wav.buffer.slice(wav.byteOffset + 44, wav.byteOffset + wav.length));
+const RATE = 16_000;
+const FRAME = RATE / 10;
+const LOUD = 1000;
+
+const stamp = (sample) => {
+  const ms = Math.round((sample / RATE) * 1000);
+  const hh = String(Math.floor(ms / 3_600_000)).padStart(2, '0');
+  const mm = String(Math.floor(ms / 60_000) % 60).padStart(2, '0');
+  const ss = String(Math.floor(ms / 1000) % 60).padStart(2, '0');
+  return `${hh}:${mm}:${ss}.${String(ms % 1000).padStart(3, '0')}`;
+};
+
+let start = -1;
+let level = 0;
+for (let frame = 0; frame * FRAME < samples.length + FRAME; frame += 1) {
+  let peak = 0;
+  for (let i = frame * FRAME; i < Math.min(samples.length, (frame + 1) * FRAME); i += 1) {
+    peak = Math.max(peak, Math.abs(samples[i]));
+  }
+  if (peak >= LOUD) {
+    if (start < 0) start = frame * FRAME;
+    level = Math.max(level, peak);
+  } else if (start >= 0) {
+    console.log(`[${stamp(start)} --> ${stamp(frame * FRAME)}]   tone ${level}`);
+    start = -1;
+    level = 0;
+  }
+}
