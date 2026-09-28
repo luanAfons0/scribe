@@ -129,6 +129,31 @@ export function viewOf(store: Store, id: number, transcribing: boolean): CallVie
   };
 }
 
+/** The longest Jottings kept: far more than anyone types in a Call. */
+const MOST_JOTTINGS = 200_000;
+
+/** Keep a Call's Jottings, whole, in place of what was there. */
+export function saveJottings(
+  store: Store,
+  id: number,
+  jottings: string,
+): { readonly id: number; readonly jottings: string } {
+  rowOf(store, id);
+  store.prepare('UPDATE calls SET jottings = ? WHERE id = ?').run(jottings, id);
+  return { id, jottings };
+}
+
+/** Jottings as given, or a sentence that says what they are. */
+export function checkJottings(given: unknown): string {
+  if (typeof given !== 'string') {
+    throw badInput('save_jottings needs "jottings" as a string: the whole text, every time.');
+  }
+  if (given.length > MOST_JOTTINGS) {
+    throw badInput(`save_jottings takes at most ${MOST_JOTTINGS} characters of Jottings.`);
+  }
+  return given;
+}
+
 /** One Call's row, or a sentence that says there is no such Call. */
 function rowOf(store: Store, id: number): CallRow {
   const row = store.prepare('SELECT * FROM calls WHERE id = ?').get(id) as CallRow | undefined;

@@ -101,6 +101,23 @@ The audio goes to the Plugin Server in chunks of five seconds and waits in
 `audio/`, in the Plugin's directory, only until Whisper has read it. Silence
 is never given to Whisper, because Whisper makes words up out of silence.
 
+### Jottings in the Popup
+
+Bind a FirstMate Shortcut to scribe's Popup page once, and restart the Host:
+
+```sh
+firstmate bind Ctrl+Alt+J scribe popup.html
+systemctl --user restart firstmate
+```
+
+During a Call, press the Shortcut. The Popup shows the red line, how long the
+Call has run, and its Jottings. Type a line; it is kept at once. Click back
+into the call: the Popup hides and nothing stops. Open it again and every line
+is there. A line that starts with `#` is a heading. **Stop** in the Popup ends
+the Call the tab records.
+
+The Call's page in the tab has the same Jottings box, before and after Stop.
+
 ### A Cut Call
 
 When the recording tab closes, the browser quits or the machine sleeps, no

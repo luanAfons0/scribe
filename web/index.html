@@ -54,6 +54,10 @@
       What Whisper heard until then is kept.
     </p>
 
+    <h3 class="section-label"><label for="call-jottings">Jottings</label></h3>
+    <textarea class="jottings" id="call-jottings" spellcheck="true"
+      placeholder="Type as the call goes. A line that starts with # is a heading."></textarea>
+
     <h3 class="section-label">Transcript</h3>
     <p class="empty" id="transcribing" hidden>Whisper is still reading the audio…</p>
     <ol class="transcript" id="transcript"></ol>
@@ -61,6 +65,7 @@
   </section>
 </main>
 <script src="rpc.js"></script>
+<script src="jottings.js"></script>
 <script src="capture.js"></script>
 <script src="app.js"></script>
 </body>

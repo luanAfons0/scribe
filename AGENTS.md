@@ -68,6 +68,9 @@ web/           the Plugin Page, as the Host serves it.
   index.html   the Plugin Page, drawn by app.js.
   rpc.js       call(): one tool call over POST rpc.
   app.js       the list of Calls, one Call, and Start and Stop.
+  popup.html   the Popup a Shortcut opens: the red line, Jottings, Stop.
+  popup.js     what drives it, from get_call with no id.
+  jottings.js  keepJottings(): the box that keeps every change at once.
   capture.js   startCapture(): the tab and the mic, sent in chunks (ADR-0001).
   pcm-tap.js   the AudioWorklet that cuts a track into 16-bit PCM chunks.
   app.css      the one stylesheet.
