@@ -8,21 +8,60 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
+<!-- The red line: shown while any Call records, whichever tab records it. -->
+<div id="live" class="live" role="status" hidden>
+  <span class="live-dot" aria-hidden="true"></span>
+  <span id="live-text">Recording</span>
+  <button class="act live-stop" id="live-stop" type="button">Stop</button>
+</div>
 <header class="bar">
-  <div class="brand"><span class="mark" aria-hidden="true"></span><span>scribe</span></div>
+  <a class="brand" href="#"><span class="mark" aria-hidden="true"></span><span>scribe</span></a>
 </header>
 <main class="page">
   <!-- What is wrong, when something is. Empty and invisible otherwise. -->
   <div id="banner" class="banner" role="alert" hidden></div>
 
   <section id="list-view">
-    <h2 class="section-label">Calls</h2>
+    <div class="mast">
+      <h2 class="section-label">Calls</h2>
+      <!-- Chrome's picker opens: choose the call's tab and tick "Also share
+           tab audio". The mic is asked for next. -->
+      <button class="act go" id="start" type="button">Start a Call</button>
+    </div>
+    <p class="hint">
+      Start opens Chrome’s picker: choose the call’s tab and tick
+      “Also share tab audio”. Keep this tab open until you press Stop.
+    </p>
     <!-- Written by app.js out of what list_calls answered, newest first. -->
     <ol class="calls" id="calls"></ol>
     <p class="empty" id="no-calls" hidden>No Calls yet.</p>
   </section>
+
+  <section id="call-view" hidden>
+    <a class="back" href="#">← All Calls</a>
+    <div class="mast">
+      <div>
+        <h2 class="call-title" id="call-title"></h2>
+        <p class="call-meta" id="call-meta"></p>
+      </div>
+      <div class="acts" id="call-acts">
+        <button class="act" id="stop" type="button" hidden>Stop</button>
+      </div>
+    </div>
+
+    <p class="cut-note" id="cut-note" hidden>
+      This Call was Cut: its tab or its Plugin Server went away before Stop.
+      What Whisper heard until then is kept.
+    </p>
+
+    <h3 class="section-label">Transcript</h3>
+    <p class="empty" id="transcribing" hidden>Whisper is still reading the audio…</p>
+    <ol class="transcript" id="transcript"></ol>
+    <p class="empty" id="no-transcript" hidden>Nothing heard yet.</p>
+  </section>
 </main>
 <script src="rpc.js"></script>
+<script src="capture.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

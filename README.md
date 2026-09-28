@@ -47,6 +47,7 @@ The Plugin Server reads these from its environment, which is the Host's:
 | `SCRIBE_WHISPER`         | The absolute path of `whisper-cli`. Required.           |
 | `SCRIBE_WHISPER_MODEL`   | The absolute path of the model file. Required.          |
 | `SCRIBE_NODE`            | The Node 24 that `mcp` runs, when `PATH` has none.       |
+| `SCRIBE_CUT_AFTER_MS`    | How long a Call may go without audio before it is Cut. Default 60000. |
 
 With `SCRIBE_WHISPER` or `SCRIBE_WHISPER_MODEL` not set, or not a file, the
 Plugin Server exits at start with one sentence that names it, and the Index
@@ -76,6 +77,38 @@ systemctl --user restart firstmate
 ```
 
 Then open the Index Page, find `scribe`, and open its Plugin Page.
+
+## Record a Call
+
+1. Open scribe's Plugin Page in Chrome or Edge. In the FirstMate window,
+   *open in browser* in the strip does that, already admitted.
+2. Press **Start a Call**. Chrome's picker opens: choose the call's tab (a
+   Meet tab, say) and tick **Also share tab audio**. The page asks for the mic
+   next.
+3. A red line shows at the top of the page while the Call records, and the
+   Transcript grows on the Call's page as Whisper reads the audio, about every
+   30 seconds. Lines from your mic are `Eu`; lines from the tab are `Outros`.
+4. Press **Stop**, or *Stop sharing* in Chrome's bar. Whisper reads what is
+   left.
+
+Keep the recording tab open until you press Stop. Only one Call records at a
+time; a second Start is refused with a sentence that names the running one.
+
+v1 assumes headphones. On speakers, the mic hears the other people too, and
+their words can show up as `Eu` lines as well as `Outros` ones.
+
+The audio goes to the Plugin Server in chunks of five seconds and waits in
+`audio/`, in the Plugin's directory, only until Whisper has read it. Silence
+is never given to Whisper, because Whisper makes words up out of silence.
+
+### A Cut Call
+
+When the recording tab closes, the browser quits or the machine sleeps, no
+audio comes. After `SCRIBE_CUT_AFTER_MS` of none (a minute), the Call is
+**Cut**: it keeps its Transcript so far and shows as Cut in the list. The same
+happens when the Plugin Server stops during a Call: the next time it starts,
+it marks that Call Cut and gives the audio it left to Whisper. A new Call can
+start at once.
 
 ## Running it
 

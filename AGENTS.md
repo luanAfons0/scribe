@@ -58,11 +58,18 @@ src/           the Plugin Server. Every file is one job.
   settings.ts  the environment: whisper.cpp, its model, the Minutes command.
   store.ts     scribe.db: open it, move it up to the current schema version.
   calls.ts     a Call: its rows, its state, and what the tools answer of it.
+  audio.ts     chunk files in audio/, joined into windows cut at silence.
+  recorder.ts  the Call that records: its tracks, its chunks, and its Cut.
+  transcriber.ts the windows, given to whisper.cpp one at a time, and the
+               Transcript lines it heard.
   tools.ts     the tools this Plugin ships, for the Page and the Popup.
   mcp.ts       the one connection to the Host: MCP over stdio.
 web/           the Plugin Page, as the Host serves it.
   index.html   the Plugin Page, drawn by app.js.
   rpc.js       call(): one tool call over POST rpc.
+  app.js       the list of Calls, one Call, and Start and Stop.
+  capture.js   startCapture(): the tab and the mic, sent in chunks (ADR-0001).
+  pcm-tap.js   the AudioWorklet that cuts a track into 16-bit PCM chunks.
   app.css      the one stylesheet.
 tests/         one file per behaviour, plus helpers/ and fixtures/.
   fixtures/    whisper, a fixture whisper.cpp, and the files it needs.
