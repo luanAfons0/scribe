@@ -28,6 +28,10 @@ const stamp = (sample) => {
   return `${hh}:${mm}:${ss}.${String(ms % 1000).padStart(3, '0')}`;
 };
 
+// A level of 1111 is a sound, not a word, and is printed the way whisper.cpp
+// prints one: as a tag in brackets.
+const said = (level) => (level === 1111 ? '[MÚSICA DE FUNDO]' : `tone ${level}`);
+
 let start = -1;
 let level = 0;
 for (let frame = 0; frame * FRAME < samples.length + FRAME; frame += 1) {
@@ -39,7 +43,7 @@ for (let frame = 0; frame * FRAME < samples.length + FRAME; frame += 1) {
     if (start < 0) start = frame * FRAME;
     level = Math.max(level, peak);
   } else if (start >= 0) {
-    console.log(`[${stamp(start)} --> ${stamp(frame * FRAME)}]   tone ${level}`);
+    console.log(`[${stamp(start)} --> ${stamp(frame * FRAME)}]   ${said(level)}`);
     start = -1;
     level = 0;
   }

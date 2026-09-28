@@ -19,6 +19,12 @@ import { MINUTES_VARIABLE } from './settings.ts';
 /** A model on a CPU may take this long before the command is given up on. */
 const MINUTES_TIMEOUT_MS = 15 * 60_000;
 
+/**
+ * Words `sh` runs itself. A command that starts with one — `cd /var/tmp && …`
+ * — has no program to look for on the PATH, so it is left to `sh` to run.
+ */
+const SHELL_WORDS: ReadonlySet<string> = new Set(['cd', 'exec', 'export', 'env', 'command', '.']);
+
 /** What the command answered: a title, when it proposed one, and the Minutes. */
 export type Made = { readonly title: string | null; readonly minutes: string };
 
@@ -73,6 +79,7 @@ export function checkCommand(command: string | null, path = process.env['PATH'] 
     );
   }
   const program = command.split(/\s+/)[0] ?? '';
+  if (SHELL_WORDS.has(program)) return command;
   const candidates = program.includes('/')
     ? [program]
     : path.split(delimiter).filter((dir) => dir !== '').map((dir) => join(dir, program));

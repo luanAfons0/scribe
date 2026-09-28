@@ -97,6 +97,8 @@ function hear(settings: Settings, window: Window): Promise<readonly Heard[]> {
     '-bs', '1',
     '-bo', '1',
     '-np',
+    // Tokens such as [MÚSICA] are not words anyone said.
+    '-sns',
     '-f', window.path,
   ];
   return new Promise((done, fail) => {
@@ -122,7 +124,9 @@ function parse(stdout: string): readonly Heard[] {
     const found = LINE.exec(line.trim());
     if (found === null) continue;
     const text = (found[9] ?? '').trim();
-    if (text === '') continue;
+    // A line that is only a sound, [MÚSICA DE FUNDO] or (risos), is not
+    // something anyone said, and the Transcript is what was said.
+    if (text === '' || /^[[(][^\])]*[\])]$/.test(text)) continue;
     const n = found.slice(1, 9).map(Number);
     heard.push({
       startMs: ((n[0]! * 60 + n[1]!) * 60 + n[2]!) * 1000 + n[3]!,

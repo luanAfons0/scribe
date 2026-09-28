@@ -82,6 +82,21 @@ test('a command that is not found is refused with a sentence that names the sett
   assert.equal(call.transcript.length, 2);
 });
 
+test('a command that starts with a word sh runs itself is run by sh', async (t) => {
+  const plugin = await startedAndShaken(t, {
+    env: { SCRIBE_MINUTES_COMMAND: `cd /tmp && exec ${COMMAND}` },
+  });
+  const id = await stoppedCall(plugin);
+
+  const call = await until(
+    plugin,
+    id,
+    (seen) => seen.minutesState !== 'none' && seen.minutesState !== 'making',
+  );
+
+  assert.equal(call.minutesState, 'made', call.minutesError ?? '');
+});
+
 test('a command that fails leaves the Minutes failed, with what it said', async (t) => {
   const plugin = await startedAndShaken(t, {
     env: { SCRIBE_MINUTES_COMMAND: COMMAND, SCRIBE_TEST_MINUTES_FAIL: '1' },
