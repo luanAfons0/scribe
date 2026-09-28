@@ -33,16 +33,29 @@
    * sentence when the reason is a fault. Resolves to { id, stop() }.
    */
   async function startCapture(hooks) {
-    const display = await navigator.mediaDevices.getDisplayMedia({
-      video: true,
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-      preferCurrentTab: false,
-      selfBrowserSurface: 'exclude',
-      surfaceSwitching: 'exclude',
-      systemAudio: 'exclude',
-    });
+    // Made now, while the click on Start still counts: Chrome starts an
+    // AudioContext made after the picker and the mic prompt suspended, and a
+    // suspended one takes in no audio at all.
+    const context = new AudioContext({ sampleRate: RATE });
+    let display;
+    try {
+      display = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        preferCurrentTab: false,
+        selfBrowserSurface: 'exclude',
+        surfaceSwitching: 'exclude',
+        systemAudio: 'exclude',
+      });
+    } catch (fault) {
+      context.close();
+      throw fault;
+    }
     const release = [display];
-    const letGo = () => release.forEach((stream) => stream.getTracks().forEach((t) => t.stop()));
+    const letGo = () => {
+      release.forEach((stream) => stream.getTracks().forEach((t) => t.stop()));
+      if (context.state !== 'closed') context.close();
+    };
 
     if (display.getAudioTracks().length === 0) {
       letGo();
@@ -55,7 +68,12 @@
     let mic;
     try {
       mic = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
       });
     } catch (fault) {
       letGo();
@@ -71,8 +89,14 @@
       throw fault;
     }
 
-    const context = new AudioContext({ sampleRate: RATE });
-    await context.audioWorklet.addModule('pcm-tap.js');
+    try {
+      await context.audioWorklet.addModule('pcm-tap.js');
+      await context.resume();
+    } catch (fault) {
+      letGo();
+      await call('stop_call', { id: id }).catch(() => {});
+      throw new Error('The browser would not process the audio: ' + fault.message);
+    }
     // The taps must be pulled to run, but nothing should be heard twice.
     const mute = context.createGain();
     mute.gain.value = 0;
@@ -85,7 +109,6 @@
       if (over) return;
       over = true;
       letGo();
-      context.close();
       window.removeEventListener('beforeunload', hold);
       hooks.onEnd(fault || null);
     }
