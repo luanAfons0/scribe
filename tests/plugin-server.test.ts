@@ -18,6 +18,7 @@ const TOOLS = [
   'append_audio',
   'get_call',
   'list_calls',
+  'make_minutes',
   'save_jottings',
   'start_call',
   'stop_call',

@@ -129,6 +129,40 @@ export function viewOf(store: Store, id: number, transcribing: boolean): CallVie
   };
 }
 
+/** Mark a Call's Minutes as being made, or as failed with the reason why. */
+export function setMinutesState(
+  store: Store,
+  id: number,
+  state: 'none' | 'making' | 'failed',
+  error: string | null = null,
+): void {
+  store
+    .prepare('UPDATE calls SET minutes_state = ?, minutes_error = ? WHERE id = ?')
+    .run(state, error, id);
+}
+
+/**
+ * Keep the Minutes a command made, and its title, unless the operator gave
+ * the Call one of their own.
+ */
+export function keepMinutes(store: Store, id: number, minutes: string, title: string | null): void {
+  store
+    .prepare(
+      "UPDATE calls SET minutes = ?, minutes_state = 'made', minutes_error = NULL, " +
+        'title = CASE WHEN title_given = 1 OR ? IS NULL THEN title ELSE ? END WHERE id = ?',
+    )
+    .run(minutes, title, title, id);
+}
+
+/** Minutes left `making` by a Plugin Server that went away: they never came. */
+export function forgetUnfinishedMinutes(store: Store): void {
+  store
+    .prepare(
+      "UPDATE calls SET minutes_state = 'failed', minutes_error = ? WHERE minutes_state = 'making'",
+    )
+    .run('The Plugin Server stopped while the Minutes were made. Make them again.');
+}
+
 /** The longest Jottings kept: far more than anyone types in a Call. */
 const MOST_JOTTINGS = 200_000;
 

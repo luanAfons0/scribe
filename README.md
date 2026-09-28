@@ -46,6 +46,7 @@ The Plugin Server reads these from its environment, which is the Host's:
 | ------------------------ | ------------------------------------------------------- |
 | `SCRIBE_WHISPER`         | The absolute path of `whisper-cli`. Required.           |
 | `SCRIBE_WHISPER_MODEL`   | The absolute path of the model file. Required.          |
+| `SCRIBE_MINUTES_COMMAND` | The command that makes the Minutes. Optional; see below. |
 | `SCRIBE_NODE`            | The Node 24 that `mcp` runs, when `PATH` has none.       |
 | `SCRIBE_CUT_AFTER_MS`    | How long a Call may go without audio before it is Cut. Default 60000. |
 
@@ -100,6 +101,45 @@ their words can show up as `Eu` lines as well as `Outros` ones.
 The audio goes to the Plugin Server in chunks of five seconds and waits in
 `audio/`, in the Plugin's directory, only until Whisper has read it. Silence
 is never given to Whisper, because Whisper makes words up out of silence.
+
+### The Minutes
+
+When you press Stop and Whisper has read the last of the audio, scribe makes
+the Minutes at once with the command in `SCRIBE_MINUTES_COMMAND`. It writes a
+prompt to the command's stdin — your Jottings, the Transcript, and the rules —
+and reads the Minutes from its stdout. The rules ask for:
+
+- your Jottings' headings, in your order, with what the Transcript says under
+  each;
+- `Decisões` and `Próximos passos` at the end;
+- the language of the Call;
+- a title on the first line, which replaces the date and time in the list.
+
+The Call's page shows the Minutes formatted. **Make Minutes again** runs the
+command again, for example after you edit the Jottings, and on a Cut Call it
+is how you get Minutes at all.
+
+scribe knows no model and holds no key (ADR-0002). Any command that reads a
+prompt on stdin and prints text will do. **Use a local model**, through
+[Ollama](https://ollama.com):
+
+```ini
+Environment=SCRIBE_MINUTES_COMMAND=/usr/local/bin/ollama run <model>
+```
+
+The recommended model is still to be chosen on a real Call (scribe#7).
+
+> **A cloud CLI sends the Transcript off this machine.** `claude -p` or
+> `codex exec -` work as the command, but every word of the Call then goes to
+> that service. The local path is the documented one.
+
+The command runs under the Host's service, whose `PATH` has no nvm. A command
+installed through nvm (`claude`, `codex`) needs its absolute path, such as
+`/home/you/.nvm/versions/node/v24.15.0/bin/claude -p`.
+
+With no command set, recording and the Transcript still work. Only Make Minutes
+is refused, with a sentence that names `SCRIBE_MINUTES_COMMAND`. A command that
+fails leaves the Minutes failed, with the last line it said on stderr.
 
 ### Jottings in the Popup
 

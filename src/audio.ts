@@ -99,7 +99,9 @@ export function takeWindow(callId: number, track: Track, last: boolean): Window 
   }
   // The rest is written before the chunks go, so a crash in between leaves
   // audio twice rather than none.
-  if (rest.length > 0) keepChunk(callId, track, first.sample + cut, Buffer.from(rest.slice().buffer));
+  if (rest.length > 0) {
+    keepChunk(callId, track, first.sample + cut, Buffer.from(rest.slice().buffer));
+  }
   for (const chunk of chunks) rmSync(join(AUDIO, chunk.name), { force: true });
   return window;
 }

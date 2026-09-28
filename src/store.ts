@@ -22,6 +22,8 @@ export type Store = DatabaseSync;
  * has shipped; a change to the schema is a new step at the end.
  */
 const STEPS: readonly string[] = [
+  // A title is proposed by the Minutes until the operator gives one; then
+  // `title_given` is 1 and no proposal replaces it.
   // A line's moment is milliseconds from the start of its Call, counted in the
   // audio of its own track, so no clock of the page or the Plugin Server is
   // in it. Deleting a Call deletes its lines.
@@ -29,6 +31,7 @@ const STEPS: readonly string[] = [
   CREATE TABLE calls (
     id INTEGER PRIMARY KEY,
     title TEXT,
+    title_given INTEGER NOT NULL DEFAULT 0,
     state TEXT NOT NULL CHECK (state IN ('recording', 'ended', 'cut')),
     started_at TEXT NOT NULL,
     ended_at TEXT,
