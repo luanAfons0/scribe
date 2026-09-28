@@ -58,6 +58,9 @@ const STEPS: readonly string[] = [
 export function openStore(path: string = FILE): Store {
   const store = new DatabaseSync(path);
   store.exec('PRAGMA foreign_keys = ON');
+  // A deleted Call leaves nothing behind: SQLite writes zeros over what it
+  // deletes instead of leaving it in free pages of the file.
+  store.exec('PRAGMA secure_delete = ON');
   const row = store.prepare('PRAGMA user_version').get() as { user_version: number };
   const version = row.user_version;
   if (version > STEPS.length) {

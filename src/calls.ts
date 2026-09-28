@@ -163,6 +163,65 @@ export function forgetUnfinishedMinutes(store: Store): void {
     .run('The Plugin Server stopped while the Minutes were made. Make them again.');
 }
 
+/** The longest title kept: one line a list can show. */
+const MOST_TITLE = 200;
+
+/** The longest Minutes kept, by hand or by a command. */
+const MOST_MINUTES = 200_000;
+
+/** Give a Call a title of the operator's own, which no proposal replaces. */
+export function renameCall(store: Store, id: number, title: string): CallSummary {
+  rowOf(store, id);
+  const row = store
+    .prepare('UPDATE calls SET title = ?, title_given = 1 WHERE id = ? RETURNING *')
+    .get(title, id) as CallRow;
+  return summaryOf(row);
+}
+
+/** Keep Minutes written or corrected by hand, in place of what was there. */
+export function saveMinutes(store: Store, id: number, minutes: string): void {
+  const row = rowOf(store, id);
+  if (row.minutes_state === 'making') {
+    throw badInput(`The Minutes of Call ${id} are being made. Save yours when that is done.`);
+  }
+  store
+    .prepare(
+      "UPDATE calls SET minutes = ?, minutes_state = 'made', minutes_error = NULL WHERE id = ?",
+    )
+    .run(minutes, id);
+}
+
+/** Delete a Call with its Jottings, its Transcript and its Minutes. */
+export function deleteCall(store: Store, id: number): { readonly id: number } {
+  const row = rowOf(store, id);
+  if (row.state === 'recording') {
+    throw badInput(`Call ${id} is still recording. Stop it before you delete it.`);
+  }
+  store.prepare('DELETE FROM calls WHERE id = ?').run(id);
+  return { id };
+}
+
+/** A title as given, or a sentence that says what a title is. */
+export function checkTitle(given: unknown): string {
+  const title = typeof given === 'string' ? given.trim() : '';
+  if (title === '' || title.includes('\n') || title.length > MOST_TITLE) {
+    throw badInput(
+      `rename_call needs "title" as one line of text, at most ${MOST_TITLE} characters.`,
+    );
+  }
+  return title;
+}
+
+/** Minutes as given, or a sentence that says what they are. */
+export function checkMinutes(given: unknown): string {
+  if (typeof given !== 'string' || given.length > MOST_MINUTES) {
+    throw badInput(
+      `save_minutes needs "minutes" as Markdown text, at most ${MOST_MINUTES} characters.`,
+    );
+  }
+  return given;
+}
+
 /** The longest Jottings kept: far more than anyone types in a Call. */
 const MOST_JOTTINGS = 200_000;
 

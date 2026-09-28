@@ -78,6 +78,24 @@ for (const { page, script } of PAGES) {
   });
 }
 
+for (const { page } of PAGES) {
+  test(`no name is declared twice across the scripts ${page} loads`, async () => {
+    // Classic scripts share one global scope, so a name two of them declare at
+    // the top stops the second one dead, and the page is blank with no test
+    // to say why.
+    const html = await readFile(join(WEB, page), 'utf8');
+    const seen = new Map<string, string>();
+    for (const script of pathsIn(html).filter((path) => path.endsWith('.js'))) {
+      const code = await readFile(join(WEB, script), 'utf8');
+      for (const found of code.matchAll(/^(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/gm)) {
+        const name = found[1] ?? '';
+        assert.ok(!seen.has(name), `${name} is declared by ${seen.get(name)} and by ${script}`);
+        seen.set(name, script);
+      }
+    }
+  });
+}
+
 test('rpc.js calls the tools over the relative rpc address, never an absolute one', async () => {
   const code = await readFile(join(WEB, 'rpc.js'), 'utf8');
 

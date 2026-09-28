@@ -40,12 +40,20 @@
   <section id="call-view" hidden>
     <a class="back" href="#">← All Calls</a>
     <div class="mast">
-      <div>
+      <div class="call-head">
         <h2 class="call-title" id="call-title"></h2>
+        <!-- Rename: the title, as one line, in place of the heading. -->
+        <form class="rename" id="rename-form" hidden>
+          <input class="input" id="title-input" type="text" maxlength="200" aria-label="Title" required>
+          <button class="act go" type="submit">Save</button>
+          <button class="act" id="rename-cancel" type="button">Cancel</button>
+        </form>
         <p class="call-meta" id="call-meta"></p>
       </div>
       <div class="acts" id="call-acts">
         <button class="act" id="stop" type="button" hidden>Stop</button>
+        <button class="act" id="rename" type="button">Rename</button>
+        <button class="act danger" id="delete" type="button">Delete</button>
       </div>
     </div>
 
@@ -57,12 +65,21 @@
     <div class="mast minutes-mast">
       <h3 class="section-label">Minutes</h3>
       <div class="acts">
+        <button class="act" id="edit-minutes" type="button" hidden>Edit</button>
         <button class="act" id="make-minutes" type="button" hidden>Make Minutes</button>
       </div>
     </div>
     <p class="empty" id="minutes-state" hidden></p>
     <!-- The Minutes as Markdown, drawn by markdown.js: escaped first, always. -->
     <article class="minutes" id="minutes" hidden></article>
+    <!-- Edit: the Minutes' Markdown, by hand. The Transcript has no editor. -->
+    <form class="minutes-form" id="minutes-form" hidden>
+      <textarea class="jottings" id="minutes-editor" aria-label="Minutes, as Markdown"></textarea>
+      <div class="acts">
+        <button class="act go" type="submit">Save Minutes</button>
+        <button class="act" id="minutes-cancel" type="button">Cancel</button>
+      </div>
+    </form>
 
     <h3 class="section-label"><label for="call-jottings">Jottings</label></h3>
     <textarea class="jottings" id="call-jottings" spellcheck="true"

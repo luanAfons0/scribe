@@ -16,10 +16,13 @@ import {
 /** Every tool scribe ships. The names are the contract with the Page. */
 const TOOLS = [
   'append_audio',
+  'delete_call',
   'get_call',
   'list_calls',
   'make_minutes',
+  'rename_call',
   'save_jottings',
+  'save_minutes',
   'start_call',
   'stop_call',
 ];
