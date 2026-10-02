@@ -18,7 +18,9 @@ const wav = readFileSync(at('-f'));
 const samples = new Int16Array(wav.buffer.slice(wav.byteOffset + 44, wav.byteOffset + wav.length));
 const RATE = 16_000;
 const FRAME = RATE / 10;
-const LOUD = 1000;
+// Low on purpose: the real whisper.cpp writes words over quiet audio too, and
+// a test needs that to show scribe drops them.
+const LOUD = 100;
 
 const stamp = (sample) => {
   const ms = Math.round((sample / RATE) * 1000);

@@ -27,11 +27,14 @@ const EARLIEST_CUT = 25 * SAMPLE_RATE;
 /** Loudness is measured in frames of this many samples: 100 ms. */
 const FRAME = SAMPLE_RATE / 10;
 /**
- * A window whose loudest frame is quieter than this is silence, and is not
- * given to Whisper at all, because Whisper makes words up out of silence.
- * It is about -44 dBFS: well under speech, well over a quiet room.
+ * How loud the loudest 100 ms of audio must be to be speech, per track. Below
+ * it, audio is not given to Whisper, because Whisper makes words up out of
+ * silence. The tab carries the call as the browser plays it: about -44 dBFS
+ * is well under speech and well over a quiet line. The mic carries the room
+ * as well — breath, keys, fans — under noise suppression and gain control
+ * that lift speech well above it, so it is held to about -36 dBFS.
  */
-const SILENCE_RMS = 200;
+const SPEECH_RMS: Readonly<Record<Track, number>> = { mic: 500, tab: 200 };
 
 /** Which track a chunk is from: the mic (`Eu`) or the shared tab (`Outros`). */
 export type Track = 'mic' | 'tab';
@@ -92,7 +95,7 @@ export function takeWindow(callId: number, track: Track, last: boolean): Window 
   const rest = samples.subarray(cut);
 
   let window: Window | null = null;
-  if (loudest(taken) >= SILENCE_RMS) {
+  if (loudest(taken) >= SPEECH_RMS[track]) {
     const path = join(AUDIO, `${callId}-${track}-${String(first.sample).padStart(12, '0')}.wav`);
     writeFileSync(path, wav(taken));
     window = { callId, track, path, startMs: Math.round((first.sample / SAMPLE_RATE) * 1000) };
@@ -154,6 +157,21 @@ function wav(samples: Int16Array): Buffer {
   header.write('data', 36, 'ascii');
   header.writeUInt32LE(data, 40);
   return Buffer.concat([header, Buffer.from(samples.buffer, samples.byteOffset, data)]);
+}
+
+/**
+ * Whether a stretch of a window, in milliseconds from its start, holds a
+ * moment loud enough to be speech on its track. Whisper writes words over the
+ * quiet start of a window that has speech later in it; a line with nothing
+ * loud under it is one of those.
+ */
+export function spokenBetween(window: Window, startMs: number, endMs: number): boolean {
+  // Copied, so the samples start on an even byte whatever buffer the read used.
+  const data = Uint8Array.prototype.slice.call(readFileSync(window.path), 44);
+  const all = new Int16Array(data.buffer, 0, Math.floor(data.length / BYTES_PER_SAMPLE));
+  const from = Math.max(0, Math.floor((startMs / 1000) * SAMPLE_RATE));
+  const to = Math.min(all.length, Math.ceil((endMs / 1000) * SAMPLE_RATE));
+  return loudest(all.subarray(from, Math.max(from, to))) >= SPEECH_RMS[window.track];
 }
 
 /** Delete one file of audio, once Whisper has read it or nobody will. */

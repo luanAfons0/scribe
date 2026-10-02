@@ -102,6 +102,32 @@ test('silence is never given to Whisper, which would make words up', async (t) =
   assert.deepEqual(await audioIn(plugin.directory), []);
 });
 
+test('a mic line with only quiet audio under it is dropped, and the tab keeps one', async (t) => {
+  const plugin = await startedAndShaken(t);
+  const id = await startCall(plugin);
+
+  const quietThenLoud = pcm([{ seconds: 1, level: 300 }, { seconds: 1 }, { seconds: 1, level: 3000 }]);
+  await send(plugin, id, 'mic', quietThenLoud);
+  await send(plugin, id, 'tab', pcm([{ seconds: 4 }, { seconds: 1, level: 300 }]));
+  await plugin.call('stop_call', { id });
+  const call = await transcribed(plugin, id);
+
+  assert.deepEqual(said(call), ['2000 Eu: tone 3000', '4000 Outros: tone 300']);
+});
+
+test('a mic window that is only quiet is never given to Whisper', async (t) => {
+  const log = join(await makeDirectory(t), 'whisper.log');
+  const plugin = await startedAndShaken(t, { env: { SCRIBE_TEST_WHISPER_LOG: log } });
+  const id = await startCall(plugin);
+
+  await send(plugin, id, 'mic', pcm([{ seconds: 2, level: 400 }]));
+  await plugin.call('stop_call', { id });
+  const call = await transcribed(plugin, id);
+
+  assert.deepEqual(call.transcript, []);
+  assert.equal(await readFile(log, 'utf8').catch(() => ''), '');
+});
+
 test('a line that is only a sound in brackets is not kept', async (t) => {
   const plugin = await startedAndShaken(t);
   const id = await startCall(plugin);
