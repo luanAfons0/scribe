@@ -342,3 +342,5 @@ body.popup .jottings-label {
 
 .minutes-form .jottings { min-height: 20em; }
 .minutes-form .acts { margin-top: 8px; }
+
+.act.more { display: block; width: 100%; margin-bottom: 6px; font-weight: 400; color: var(--muted); }

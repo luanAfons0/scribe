@@ -35,6 +35,13 @@ const minutesCancel = byId('minutes-cancel');
 const transcript = byId('transcript');
 const transcribing = byId('transcribing');
 const noTranscript = byId('no-transcript');
+const moreLines = byId('more-lines');
+
+/** How many of the last Transcript lines show before "See more". */
+const LAST_LINES = 10;
+
+/** The Calls whose whole Transcript is shown, since "See more" was pressed. */
+const wholeTranscript = new Set();
 
 /** How often the page asks again while something is still changing. */
 const POLL_MS = 2000;
@@ -122,8 +129,13 @@ async function showCall(id) {
   cutNote.hidden = found.state !== 'cut';
   jottings.show(found.id, found.jottings);
 
+  const whole = wholeTranscript.has(found.id) || found.transcript.length <= LAST_LINES;
+  const hidden = whole ? 0 : found.transcript.length - LAST_LINES;
+  moreLines.hidden = hidden === 0;
+  moreLines.textContent = 'See more (' + hidden + ' earlier line' + (hidden === 1 ? '' : 's') + ')';
+  moreLines.dataset.id = String(found.id);
   transcript.replaceChildren(
-    ...found.transcript.map((line) => {
+    ...found.transcript.slice(hidden).map((line) => {
       const item = document.createElement('li');
       item.className = 'line ' + (line.speaker === 'Eu' ? 'mine' : 'theirs');
       const at = document.createElement('span');
@@ -313,6 +325,11 @@ deleteButton.addEventListener('click', async () => {
 window.addEventListener('hashchange', () => {
   renaming(false);
   minutesForm.hidden = true;
+});
+
+moreLines.addEventListener('click', () => {
+  wholeTranscript.add(Number(moreLines.dataset.id));
+  show();
 });
 
 startButton.addEventListener('click', start);

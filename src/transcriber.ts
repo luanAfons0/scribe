@@ -55,25 +55,35 @@ export function transcriberFor(
     // one deleted while Whisper read it took the file away: neither is news.
     const gone = (): boolean =>
       store.prepare('SELECT 1 FROM calls WHERE id = ?').get(window.callId) === undefined;
-    (gone() ? Promise.resolve([]) : hear(settings, window)).then(
-      (lines) => keep(store, window, lines),
-      (fault) => {
+    // A fault here — Whisper's, or keeping what it heard — loses one window
+    // and says so in the journal. It never takes the Plugin Server down, and
+    // the windows after it are still read.
+    (gone() ? Promise.resolve([]) : hear(settings, window))
+      .then((lines) => keep(store, window, lines))
+      .catch((fault: unknown) => {
         if (gone()) return;
         process.stderr.write(
-          `scribe: whisper.cpp could not read a window of Call ${window.callId}: ` +
+          `scribe: a window of Call ${window.callId} was not transcribed: ` +
             `${sentenceFor(fault)}\n`,
         );
-      },
-    ).finally(() => {
-      forget(window.path);
-      const left = (owed.get(window.callId) ?? 1) - 1;
-      if (left > 0) owed.set(window.callId, left);
-      else {
-        owed.delete(window.callId);
-        idle(window.callId);
-      }
-      next();
-    });
+      })
+      .finally(() => {
+        forget(window.path);
+        const left = (owed.get(window.callId) ?? 1) - 1;
+        if (left > 0) owed.set(window.callId, left);
+        else {
+          owed.delete(window.callId);
+          try {
+            idle(window.callId);
+          } catch (fault) {
+            process.stderr.write(
+              `scribe: Call ${window.callId} was heard, and what comes next failed: ` +
+                `${sentenceFor(fault)}\n`,
+            );
+          }
+        }
+        next();
+      });
   };
 
   return {
