@@ -1,6 +1,6 @@
 /**
- * The tools this Plugin ships: one for each thing the Plugin Page, the Popup
- * or another Plugin can ask scribe to do (FirstMate ADR-0009).
+ * The tools this Plugin ships: one for each thing the Plugin Page or another
+ * Plugin can ask scribe to do (FirstMate ADR-0009).
  *
  * Every tool answers the same data twice — as text, for whoever reads it in a
  * terminal, and as structure, for the Page, which draws it.

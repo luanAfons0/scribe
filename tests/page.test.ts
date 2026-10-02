@@ -19,7 +19,6 @@ const WEB = join(REPOSITORY, 'web');
 /** Every page in web/, and the script each one runs. */
 const PAGES = [
   { page: 'index.html', script: 'app.js' },
-  { page: 'popup.html', script: 'popup.js' },
 ];
 
 /** Every `href` and `src` the page names, in the order it names them. */

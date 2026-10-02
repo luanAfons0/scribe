@@ -6,8 +6,8 @@
    The picker comes first, then the mic, and only then is the Call started,
    so a cancelled picker leaves no Call behind. A chunk that cannot be sent is
    tried again until it goes, so a Host that blinks loses no audio. When the
-   Plugin Server says the Call no longer records — it was stopped from the
-   Popup, or it was Cut — this tab lets go of the tab and the mic. */
+   Plugin Server says the Call no longer records — it was stopped from
+   another tab, or it was Cut — this tab lets go of the tab and the mic. */
 'use strict';
 
 (function () {

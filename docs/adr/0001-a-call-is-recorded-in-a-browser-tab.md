@@ -26,5 +26,6 @@ each time, which is also the consent.
 The tab must stay open for the whole Call. When it closes, the audio stops,
 and the Call is Cut rather than lost.
 
-The Popup is for the Jottings and for Stop, and holds no state of its own: it
-reads everything from the Plugin Server each time it opens.
+The Jottings and Stop are on the Call's page, in the same tab. A first
+version also had them in a Popup, and the operator took it out as more than
+was needed.

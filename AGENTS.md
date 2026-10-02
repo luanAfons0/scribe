@@ -7,8 +7,8 @@ Plugin Server with one SQLite file behind it, and a Plugin Page.
 
 Read [`CONTEXT.md`](CONTEXT.md) first. It defines every word this repo uses —
 Call, Jottings, Transcript, Minutes, Cut — and the synonyms to avoid. It
-borrows FirstMate's words (Host, Plugin, Plugin Page, Plugin Server, Popup,
-Shortcut, Stopped) unchanged, from
+borrows FirstMate's words (Host, Plugin, Plugin Page, Plugin Server,
+Stopped) unchanged, from
 [FirstMate's `CONTEXT.md`](https://github.com/luanAfons0/FirstMate/blob/main/CONTEXT.md).
 Use those words in code, in comments, in tests, in issues and in commit
 messages.
@@ -64,14 +64,12 @@ src/           the Plugin Server. Every file is one job.
                Transcript lines it heard.
   minutes.ts   the prompt, the Minutes command, and the title it proposes.
   minutes-maker.ts when the Minutes are made: after Stop, and on request.
-  tools.ts     the tools this Plugin ships, for the Page and the Popup.
+  tools.ts     the tools this Plugin ships, for the Page.
   mcp.ts       the one connection to the Host: MCP over stdio.
 web/           the Plugin Page, as the Host serves it.
   index.html   the Plugin Page, drawn by app.js.
   rpc.js       call(): one tool call over POST rpc.
   app.js       the list of Calls, one Call, and Start and Stop.
-  popup.html   the Popup a Shortcut opens: the red line, Jottings, Stop.
-  popup.js     what drives it, from get_call with no id.
   jottings.js  keepJottings(): the box that keeps every change at once.
   markdown.js  the small Markdown renderer for the Minutes, as Worklog's.
   capture.js   startCapture(): the tab and the mic, sent in chunks (ADR-0001).
@@ -144,7 +142,7 @@ ignores both.
 - Any `git add`, `git commit`, `git push`, or anything that opens a PR.
 - Adding a dependency of any kind.
 - Changing the name, input or output of a tool: they are the contract with
-  the Page and the Popup.
+  the Page.
 - A schema change to `scribe.db`. It is a new step at the end of `STEPS` in
   `src/store.ts`, never an edit to a step that shipped.
 - Anything that reverses an ADR.

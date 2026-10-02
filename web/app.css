@@ -267,8 +267,6 @@ h3.section-label { margin-top: 24px; }
   color: var(--muted);
 }
 
-.jottings-label { display: block; }
-
 .jottings {
   display: block;
   width: 100%;
@@ -283,25 +281,6 @@ h3.section-label { margin-top: 24px; }
 }
 
 .jottings:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-
-/* The Popup is small and has one job: the box fills what the red line leaves. */
-body.popup { display: flex; flex-direction: column; height: 100vh; }
-body.popup .page {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  width: 100%;
-  min-width: 0;
-  padding: 12px;
-}
-body.popup .jottings { flex: 1; min-height: 6em; }
-body.popup .jottings-label {
-  margin-bottom: 6px;
-  color: var(--muted);
-  font: 600 13px/1.2 var(--display);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
 
 .minutes-mast { margin-top: 24px; }
 .minutes-mast .section-label { margin: 0; }

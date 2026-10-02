@@ -1,6 +1,6 @@
 /**
  * Jottings are what you type during a Call. Each change is kept on the Plugin
- * Server at once, so a Popup that hides and loads again loses nothing.
+ * Server at once, so a tab that closes loses nothing.
  */
 import { strict as assert } from 'node:assert';
 import test from 'node:test';
@@ -18,7 +18,7 @@ test('Jottings saved for a Call are the Jottings read back', async (t) => {
   assert.equal((await getCall(plugin, id)).jottings, JOTTINGS);
 });
 
-test('the Popup, which asks for the Call that records, gets the Jottings so far', async (t) => {
+test('the Call that records, asked for with no id, has the Jottings so far', async (t) => {
   const plugin = await startedAndShaken(t);
   const id = await startCall(plugin);
   await plugin.call('save_jottings', { id, jottings: 'first line' });
@@ -55,7 +55,7 @@ test('Jottings can change after the Call ended', async (t) => {
   assert.equal((await getCall(plugin, id)).jottings, 'written after');
 });
 
-test('Stop from the Popup ends the Call the tab records, and the tab is told', async (t) => {
+test('Stop from another tab ends the Call this tab records, and this tab is told', async (t) => {
   const plugin = await startedAndShaken(t);
   const id = await startCall(plugin);
 
