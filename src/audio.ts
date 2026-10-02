@@ -36,7 +36,7 @@ const FRAME = SAMPLE_RATE / 10;
  */
 const SPEECH_RMS: Readonly<Record<Track, number>> = { mic: 500, tab: 200 };
 
-/** Which track a chunk is from: the mic (`Eu`) or the shared tab (`Outros`). */
+/** Which track a chunk is from: the mic (`Você`) or the shared tab (`Outros`). */
 export type Track = 'mic' | 'tab';
 
 /** One window, written and ready for Whisper. */

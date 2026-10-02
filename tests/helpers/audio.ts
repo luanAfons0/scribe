@@ -54,7 +54,7 @@ export async function send(
 
 /** One line of a Transcript, as get_call answers it. */
 export type Line = {
-  readonly speaker: 'Eu' | 'Outros';
+  readonly speaker: 'Você' | 'Outros';
   readonly startMs: number;
   readonly endMs: number;
   readonly text: string;

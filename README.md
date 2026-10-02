@@ -1,8 +1,9 @@
 # scribe
 
 A FirstMate Plugin that records a call in a browser tab, writes down what was
-said, and makes the Minutes from what you typed during it. The audio and the
-text stay on this machine.
+said, and makes the Minutes from what you typed during it. It keeps the text,
+never the audio: each chunk of audio is deleted as soon as Whisper has read
+it.
 
 Read [`CONTEXT.md`](CONTEXT.md) for the words this project uses — Call,
 Jottings, Transcript, Minutes, Cut — and [`docs/adr/`](docs/adr) for why a Call
@@ -88,7 +89,7 @@ Then open the Index Page, find `scribe`, and open its Plugin Page.
    next.
 3. A red line shows at the top of the page while the Call records, and the
    Transcript grows on the Call's page as Whisper reads the audio, about every
-   30 seconds. Lines from your mic are `Eu`; lines from the tab are `Outros`.
+   30 seconds. Lines from your mic are `Você`; lines from the tab are `Outros`.
 4. Press **Stop**, or *Stop sharing* in Chrome's bar. Whisper reads what is
    left.
 
@@ -96,11 +97,13 @@ Keep the recording tab open until you press Stop. Only one Call records at a
 time; a second Start is refused with a sentence that names the running one.
 
 v1 assumes headphones. On speakers, the mic hears the other people too, and
-their words can show up as `Eu` lines as well as `Outros` ones.
+their words can show up as `Você` lines as well as `Outros` ones.
 
-The audio goes to the Plugin Server in chunks of five seconds and waits in
-`audio/`, in the Plugin's directory, only until Whisper has read it. Silence
-is never given to Whisper, because Whisper makes words up out of silence.
+scribe keeps no recording. The audio goes to the Plugin Server in chunks of
+five seconds and waits in `audio/`, in the Plugin's directory, only until
+Whisper has read it — about 30 seconds — and is then deleted. What stays is
+the Transcript, the Jottings and the Minutes, in `scribe.db`. Silence is never
+given to Whisper, because Whisper makes words up out of silence.
 
 ### The Minutes
 
@@ -140,8 +143,8 @@ Why each part is there:
 
 It uses the login `claude` already has, so there is no key to set.
 
-> **This sends the Transcript off this machine.** The audio stays here, but
-> the Jottings and every word of the Transcript go to Anthropic when the
+> **This sends the Transcript off this machine.** The audio never leaves it,
+> but the Jottings and every word of the Transcript go to Anthropic when the
 > Minutes are made. For a Call that must stay local, use a local model
 > instead, through [Ollama](https://ollama.com):
 > `SCRIBE_MINUTES_COMMAND=/usr/local/bin/ollama run <model>`. The same holds

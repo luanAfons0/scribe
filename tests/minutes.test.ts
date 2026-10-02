@@ -45,7 +45,7 @@ test('the prompt holds the Jottings, the Transcript and the rules', async (t) =>
   const prompt = await readFile(log, 'utf8');
 
   assert.ok(prompt.includes('# Prazo\nentrega sexta'), prompt);
-  assert.ok(prompt.includes('[00:00] Eu: tone 3000'), prompt);
+  assert.ok(prompt.includes('[00:00] Você: tone 3000'), prompt);
   assert.ok(prompt.includes('[00:02] Outros: tone 4000'), prompt);
   assert.ok(prompt.includes('## Decisões'), 'the prompt does not ask for Decisões');
   assert.ok(prompt.includes('## Próximos passos'), 'the prompt does not ask for Próximos passos');

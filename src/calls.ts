@@ -14,7 +14,7 @@ import { now, type Store } from './store.ts';
 export type CallState = 'recording' | 'ended' | 'cut';
 
 /** Who said a Transcript line, as far as scribe can tell: by track alone. */
-export type Speaker = 'Eu' | 'Outros';
+export type Speaker = 'Você' | 'Outros';
 
 /** Where the Minutes of a Call stand. */
 export type MinutesState = 'none' | 'making' | 'made' | 'failed';
@@ -61,7 +61,7 @@ type CallRow = {
   readonly minutes_error: string | null;
 };
 
-const SPEAKERS: Readonly<Record<Track, Speaker>> = { mic: 'Eu', tab: 'Outros' };
+const SPEAKERS: Readonly<Record<Track, Speaker>> = { mic: 'Você', tab: 'Outros' };
 
 /** Every Call, newest first. */
 export function listCalls(store: Store): readonly CallSummary[] {

@@ -137,7 +137,7 @@ async function showCall(id) {
   transcript.replaceChildren(
     ...found.transcript.slice(hidden).map((line) => {
       const item = document.createElement('li');
-      item.className = 'line ' + (line.speaker === 'Eu' ? 'mine' : 'theirs');
+      item.className = 'line ' + (line.speaker === 'Você' ? 'mine' : 'theirs');
       const at = document.createElement('span');
       at.className = 'at';
       at.textContent = clock(line.startMs);

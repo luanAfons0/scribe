@@ -1,6 +1,6 @@
 /**
  * A Call records the mic and the shared tab, and Whisper makes its Transcript
- * as it goes: every line labelled `Eu` or `Outros`, in time order, and no
+ * as it goes: every line labelled `Você` or `Outros`, in time order, and no
  * audio kept once Whisper has read it.
  */
 import { strict as assert } from 'node:assert';
@@ -28,7 +28,7 @@ async function audioIn(directory: string): Promise<readonly string[]> {
   }
 }
 
-test('a Call fed on both tracks and stopped has Eu and Outros lines in time order', async (t) => {
+test('a Call fed on both tracks and stopped has Você and Outros lines in time order', async (t) => {
   const plugin = await startedAndShaken(t);
   const id = await startCall(plugin);
 
@@ -44,9 +44,9 @@ test('a Call fed on both tracks and stopped has Eu and Outros lines in time orde
 
   assert.equal(call.state, 'ended');
   assert.deepEqual(said(call), [
-    '0 Eu: tone 3000',
+    '0 Você: tone 3000',
     '2000 Outros: tone 4000',
-    '4000 Eu: tone 5000',
+    '4000 Você: tone 5000',
   ]);
 });
 
@@ -72,7 +72,7 @@ test('the Transcript grows while the Call still records', async (t) => {
   const call = await until(plugin, id, (seen) => seen.transcript.length > 0);
 
   assert.equal(call.state, 'recording');
-  assert.deepEqual(said(call), ['0 Eu: tone 3000']);
+  assert.deepEqual(said(call), ['0 Você: tone 3000']);
 });
 
 test('no audio file is left once Whisper has read it', async (t) => {
@@ -112,7 +112,7 @@ test('a mic line with only quiet audio under it is dropped, and the tab keeps on
   await plugin.call('stop_call', { id });
   const call = await transcribed(plugin, id);
 
-  assert.deepEqual(said(call), ['2000 Eu: tone 3000', '4000 Outros: tone 300']);
+  assert.deepEqual(said(call), ['2000 Você: tone 3000', '4000 Outros: tone 300']);
 });
 
 test('a mic window that is only quiet is never given to Whisper', async (t) => {
@@ -208,7 +208,7 @@ test('a chunk sent twice is kept once, and one that skips ahead is refused', asy
 
   assert.equal(again.error, undefined);
   assert.ok(skipped.error?.message.includes('expected chunk 1'), skipped.error?.message);
-  assert.deepEqual(said(call), ['0 Eu: tone 3000']);
+  assert.deepEqual(said(call), ['0 Você: tone 3000']);
 });
 
 test('audio for a Call that does not record is refused with a sentence', async (t) => {
