@@ -112,7 +112,7 @@ test('a Call deleted while Whisper still has its audio leaves no audio behind', 
 
   const audio = await readdir(join(plugin.directory, 'audio')).catch(() => []);
   assert.deepEqual(audio, []);
-  assert.ok(!plugin.output().includes('could not read'), plugin.output());
+  assert.ok(!plugin.output().includes('was not transcribed'), plugin.output());
 });
 
 test('a Call that records is not deleted', async (t) => {

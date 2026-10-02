@@ -38,10 +38,20 @@ export function minutesMakerFor(
 
   const begin = (command: string, call: CallView): void => {
     within(store, () => setMinutesState(store, call.id, 'making'));
-    makeMinutes(command, promptFor(call)).then(
-      (made) => within(store, () => keepMinutes(store, call.id, made.minutes, made.title)),
-      (fault) => within(store, () => setMinutesState(store, call.id, 'failed', sentenceFor(fault))),
-    );
+    makeMinutes(command, promptFor(call))
+      .then((made) => within(store, () => keepMinutes(store, call.id, made.minutes, made.title)))
+      .catch((fault: unknown) => {
+        // Whatever went wrong — the command, or keeping what it printed — is
+        // the Call's to show. It never takes the Plugin Server down with it.
+        try {
+          within(store, () => setMinutesState(store, call.id, 'failed', sentenceFor(fault)));
+        } catch (worse) {
+          process.stderr.write(
+            `scribe: the Minutes of Call ${call.id} failed, and so did saying so: ` +
+              `${sentenceFor(worse)}\n`,
+          );
+        }
+      });
   };
 
   return {
