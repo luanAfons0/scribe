@@ -9,7 +9,7 @@
  * soon as Whisper has read it, whether it heard anything or not.
  */
 import { execFile } from 'node:child_process';
-import { forget, type Window } from './audio.ts';
+import { forget, spokenBetween, type Window } from './audio.ts';
 import { sentenceFor } from './mcp.ts';
 import type { Settings } from './settings.ts';
 import { within, type Store } from './store.ts';
@@ -59,7 +59,7 @@ export function transcriberFor(
     // and says so in the journal. It never takes the Plugin Server down, and
     // the windows after it are still read.
     (gone() ? Promise.resolve([]) : hear(settings, window))
-      .then((lines) => keep(store, window, lines))
+      .then((lines) => keep(store, window, lines.filter((line) => heardOn(window, line))))
       .catch((fault: unknown) => {
         if (gone()) return;
         process.stderr.write(
@@ -148,6 +148,15 @@ function parse(stdout: string): readonly Heard[] {
 }
 
 /** Keep what was heard as Transcript lines, unless the Call is gone. */
+/**
+ * Whether a line Whisper wrote has speech under it. Only the mic is checked:
+ * it carries the room between your words, and Whisper reads the room as
+ * words. A line on the tab is the call itself.
+ */
+function heardOn(window: Window, line: Heard): boolean {
+  return window.track !== 'mic' || spokenBetween(window, line.startMs, line.endMs);
+}
+
 function keep(store: Store, window: Window, heard: readonly Heard[]): void {
   within(store, () => {
     const call = store.prepare('SELECT id FROM calls WHERE id = ?').get(window.callId);
