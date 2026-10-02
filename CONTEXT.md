@@ -2,7 +2,8 @@
 
 scribe is a FirstMate Plugin. It records a call that runs in a browser tab,
 writes down what was said, and makes the Minutes of it from what you typed
-during the call. The audio and the text stay on this machine.
+during the call. It keeps the text and never the audio: each chunk of audio
+is deleted as soon as Whisper has read it.
 
 It is a Plugin like any other, so it borrows FirstMate's words unchanged —
 Host, Plugin, Plugin Page, Plugin Server, Stopped. They are
@@ -23,7 +24,7 @@ a heading.
 _Avoid_: notes (Worklog's Note), draft
 
 **Transcript**:
-Everything Whisper heard in a Call, line by line, each line labelled `Eu`
+Everything Whisper heard in a Call, line by line, each line labelled `Você`
 (your mic) or `Outros` (the call's audio, from the shared tab). Nobody edits
 it: it is the record of the Call.
 _Avoid_: captions, subtitles, log
@@ -43,7 +44,7 @@ _Avoid_: crashed, failed, aborted
 ## Relationships
 
 - A Call has one set of Jottings, one Transcript and at most one Minutes.
-- A Transcript line comes from one track: the mic (`Eu`) or the tab (`Outros`).
+- A Transcript line comes from one track: the mic (`Você`) or the tab (`Outros`).
   scribe tells people apart by track and nothing else.
 - The Minutes are made from the Jottings and the Transcript by a command you
   choose. scribe knows no model (ADR-0002).

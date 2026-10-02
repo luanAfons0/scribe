@@ -9,7 +9,7 @@ Any tool that reads a prompt and prints text will do: a local model through
 `ollama run`, or a cloud CLI. The operator chose Claude Code in print mode
 (`claude -p`), and the README says so, with a warning that it sends the
 Jottings and the Transcript off this machine and the local command to use
-instead. The audio never leaves.
+instead. The audio is never sent: it is deleted once Whisper has read it.
 
 ## Consequences
 

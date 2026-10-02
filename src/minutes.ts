@@ -41,7 +41,7 @@ add what the Transcript says about it, as short bullet points.
 4. End with exactly these two sections, in this order: "## Decisões" and \
 "## Próximos passos". Under "Próximos passos", say who does what and by when, as far as \
 the Transcript says. Write "- Nenhuma." under a section with nothing in it.
-5. "Eu" is the operator; "Outros" is everyone else on the call. Do not make up names the \
+5. "Você" is the operator; "Outros" is everyone else on the call. Do not make up names the \
 Transcript does not say.
 6. Write nothing the Jottings or the Transcript do not support.
 7. The first line of your answer is "TITLE: " and a short title for the call, in its \

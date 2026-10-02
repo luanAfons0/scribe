@@ -20,7 +20,7 @@ test('a Call whose audio stops coming is Cut after the timeout, and keeps its Tr
 
   assert.equal(call.state, 'cut');
   assert.ok(call.endedAt !== null);
-  assert.deepEqual(said(call), ['0 Eu: tone 3000']);
+  assert.deepEqual(said(call), ['0 Você: tone 3000']);
 });
 
 test('a Call that keeps getting audio is not Cut', async (t) => {
@@ -52,7 +52,7 @@ test('a Call whose Plugin Server was killed is Cut when it starts again, with it
   const call = await transcribed(again, id);
 
   assert.equal(call.state, 'cut');
-  assert.deepEqual(said(call), ['0 Eu: tone 3000', '2000 Outros: tone 4000']);
+  assert.deepEqual(said(call), ['0 Você: tone 3000', '2000 Outros: tone 4000']);
   assert.deepEqual(await readdir(join(first.directory, 'audio')), []);
 });
 

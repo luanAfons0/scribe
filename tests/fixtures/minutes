@@ -14,7 +14,7 @@ process.stdin.on('end', () => {
     process.stderr.write('pulling manifest\nError: model "nada" not found\n');
     process.exit(3);
   }
-  const lines = (prompt.match(/\] (Eu|Outros): /g) || []).length;
+  const lines = (prompt.match(/\] (Você|Outros): /g) || []).length;
   process.stdout.write(
     'TITLE: Prazo da entrega\n\n## Prazo\n- Entrega na **sexta**.\n\n' +
       `## Decisões\n- ${lines} linhas lidas.\n\n## Próximos passos\n- Nenhuma.\n`,
