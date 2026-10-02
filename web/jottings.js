@@ -1,8 +1,6 @@
-/* The Jottings box, for the Plugin Page and the Popup alike. Every change is
-   sent to the Plugin Server a moment after the typing pauses, one save after
-   another in order, and at once when the box or the window loses focus: the
-   Popup hides as soon as you click back into the call, and it unloads its
-   page when it does (FirstMate ADR-0013), so nothing may wait for later. It
+/* The Jottings box. Every change is sent to the Plugin Server a moment after
+   the typing pauses, one save after another in order, and at once when the
+   box or the window loses focus, so a tab that closes loses nothing. It
    defines one global: keepJottings(box, onFault) → { show, save }. */
 'use strict';
 

@@ -5,7 +5,7 @@ writes down what was said, and makes the Minutes of it from what you typed
 during the call. The audio and the text stay on this machine.
 
 It is a Plugin like any other, so it borrows FirstMate's words unchanged —
-Host, Plugin, Plugin Page, Plugin Server, Popup, Shortcut, Stopped. They are
+Host, Plugin, Plugin Page, Plugin Server, Stopped. They are
 defined once, in
 [FirstMate's `CONTEXT.md`](https://github.com/luanAfons0/FirstMate/blob/main/CONTEXT.md),
 and this file never redefines one.

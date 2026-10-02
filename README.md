@@ -168,22 +168,11 @@ and state. Open one to read its Minutes and its Transcript. From there:
 
 The Transcript cannot be edited: it is the record of the Call.
 
-### Jottings in the Popup
+### Jottings
 
-Bind a FirstMate Shortcut to scribe's Popup page once, and restart the Host:
-
-```sh
-firstmate bind Ctrl+Alt+J scribe popup.html
-systemctl --user restart firstmate
-```
-
-During a Call, press the Shortcut. The Popup shows the red line, how long the
-Call has run, and its Jottings. Type a line; it is kept at once. Click back
-into the call: the Popup hides and nothing stops. Open it again and every line
-is there. A line that starts with `#` is a heading. **Stop** in the Popup ends
-the Call the tab records.
-
-The Call's page in the tab has the same Jottings box, before and after Stop.
+The Call's page has a Jottings box, during the Call and after it. Every
+change is kept at once. A line that starts with `#` is a heading, and the
+Minutes keep your headings in your order.
 
 ### A Cut Call
 
