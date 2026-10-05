@@ -6,7 +6,7 @@ the Jottings and the Transcript with a command the operator chooses. It is a
 Plugin Server with one SQLite file behind it, and a Plugin Page.
 
 Read [`CONTEXT.md`](CONTEXT.md) first. It defines every word this repo uses —
-Call, Jottings, Transcript, Minutes, Cut — and the synonyms to avoid. It
+Call, Jottings, Transcript, Minutes, Topics, Cut — and the synonyms to avoid. It
 borrows FirstMate's words (Host, Plugin, Plugin Page, Plugin Server,
 Stopped) unchanged, from
 [FirstMate's `CONTEXT.md`](https://github.com/luanAfons0/FirstMate/blob/main/CONTEXT.md).
@@ -64,6 +64,10 @@ src/           the Plugin Server. Every file is one job.
                Transcript lines it heard.
   minutes.ts   the prompt, the Minutes command, and the title it proposes.
   minutes-maker.ts when the Minutes are made: after Stop, and on request.
+  worklog-entry.ts the Call's Entry in Worklog: its title, its Topics, and
+               why it was not sent, when it was not.
+  bus.ts       the Tool Bus, from this end of the pipe: ask the Host to call
+               another Plugin's tool, and read its answer by id.
   tools.ts     the tools this Plugin ships, for the Page.
   mcp.ts       the one connection to the Host: MCP over stdio.
 web/           the Plugin Page, as the Host serves it.
@@ -153,6 +157,7 @@ ignores both.
 - Keep audio longer than it takes Whisper to read it.
 - Send the audio, the Jottings or the Transcript anywhere but the Minutes
   command the operator set. scribe knows no model and holds no key (ADR-0002).
+  Worklog gets a Call's title, its times and its Topics, and nothing else.
 - Edit a Transcript. It is the record of the Call.
 - Record in the FirstMate window or the Popup (ADR-0001).
 - Tell the other people on the call anything, or join or post to a call.

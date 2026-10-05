@@ -8,6 +8,7 @@
  * It says nothing on the way up. A Plugin Server that started is what the
  * Index Page shows; the journal is for what went wrong.
  */
+import { receive } from './bus.ts';
 import { sentenceFor, serve } from './mcp.ts';
 import { minutesMakerFor, type MinutesMaker } from './minutes-maker.ts';
 import { recorderFor } from './recorder.ts';
@@ -15,6 +16,7 @@ import { readSettings } from './settings.ts';
 import { openStore } from './store.ts';
 import { toolsFor } from './tools.ts';
 import { transcriberFor } from './transcriber.ts';
+import { entrySenderFor } from './worklog-entry.ts';
 
 // A missing whisper.cpp, a missing model, or a file that cannot be opened is
 // one sentence and a non-zero exit: the Index Page shows the Plugin Stopped
@@ -34,7 +36,13 @@ const { settings, store } = (() => {
 let maker: MinutesMaker | null = null;
 const heard = (id: number): void => maker?.heard(id);
 const transcriber = transcriberFor(store, settings, heard);
-maker = minutesMakerFor(store, settings, (id) => transcriber.busyWith(id));
+const sender = entrySenderFor(store, settings);
+maker = minutesMakerFor(
+  store,
+  settings,
+  (id) => transcriber.busyWith(id),
+  (id) => sender.made(id),
+);
 const recorder = recorderFor(store, transcriber, settings, heard);
 
-serve(toolsFor({ store, recorder, transcriber, maker }));
+serve(toolsFor({ store, recorder, transcriber, maker }), receive);

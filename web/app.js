@@ -22,6 +22,7 @@ const cutNote = byId('cut-note');
 const jottingsBox = byId('call-jottings');
 const makeButton = byId('make-minutes');
 const minutesState = byId('minutes-state');
+const entryState = byId('entry-state');
 const minutesView = byId('minutes');
 const renameButton = byId('rename');
 const renameForm = byId('rename-form');
@@ -186,6 +187,8 @@ function showMinutes(found) {
   minutesView.hidden = minutesView.hidden || !minutesForm.hidden;
   makeButton.disabled = found.transcribing || found.minutesState === 'making';
   makeButton.textContent = found.minutes === null ? 'Make Minutes' : 'Make Minutes again';
+  entryState.textContent = found.entryError === null ? '' : 'Worklog: ' + found.entryError;
+  entryState.hidden = found.entryError === null;
 }
 
 async function makeMinutes() {

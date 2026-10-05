@@ -16,6 +16,10 @@
  * `tests/fixtures/`, reached through the same settings the Host would pass.
  * Every Plugin Server a test starts gets the fixture whisper and model unless
  * the test says otherwise, and no Minutes command unless it names one.
+ *
+ * A test can also play the Host's Tool Bus (FirstMate ADR-0009): it reads the
+ * questions the Plugin Server writes on stdout, and answers each by its id
+ * with a result, an error, or nothing at all.
  */
 import { spawn } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -62,6 +66,13 @@ export type StartOptions = {
   readonly directory?: string;
 };
 
+/** A question the Plugin Server put to the Host over the Tool Bus. */
+export type HostQuestion = {
+  readonly id: string;
+  readonly method: string;
+  readonly params: Readonly<Record<string, unknown>>;
+};
+
 export type Ending = { readonly code: number | null; readonly signal: NodeJS.Signals | null };
 
 export type Started = {
@@ -79,6 +90,12 @@ export type Started = {
   raw(line: string): void;
   /** Every line the Plugin Server has written on stdout, as it wrote it. */
   lines(): readonly string[];
+  /** Every question the Plugin Server has put to the Host, in order. */
+  questions(): readonly HostQuestion[];
+  /** The next question the Plugin Server puts to the Host, once it does. */
+  nextQuestion(): Promise<HostQuestion>;
+  /** Answer a question as the Host: with a result, or with an error. */
+  answerAsHost(id: string, answer: Answer): void;
   /** Everything the Plugin Server has written on stderr. */
   output(): string;
   /** What the Plugin Server exited as, once it has. */
@@ -118,6 +135,9 @@ export async function startPluginServer(
   let counter = 0;
   /** Whoever here is waiting for the Plugin Server, by the id it was asked with. */
   const owed = new Map<string, (answer: Answer) => void>();
+  const questions: HostQuestion[] = [];
+  let read = 0;
+  let waiting: ((question: HostQuestion) => void) | null = null;
 
   let ending: Ending | null = null;
   const ended = new Promise<Ending>((done) => {
@@ -158,6 +178,23 @@ export async function startPluginServer(
       message = JSON.parse(line) as Record<string, unknown>;
     } catch {
       // Not JSON. A test reads it off `lines()` and says so itself.
+      return;
+    }
+    // A message that names a method is a question for the Host, never an
+    // answer to the test.
+    if (typeof message['method'] === 'string') {
+      const question = {
+        id: String(message['id']),
+        method: message['method'],
+        params: (message['params'] ?? {}) as Record<string, unknown>,
+      };
+      questions.push(question);
+      if (waiting !== null) {
+        const handed = waiting;
+        waiting = null;
+        read += 1;
+        handed(question);
+      }
       return;
     }
     const answered = owed.get(String(message['id']));
@@ -203,6 +240,25 @@ export async function startPluginServer(
     notify: (method, params) => send({ jsonrpc: '2.0', method, params }),
     raw: (line) => child.stdin!.write(`${line}\n`),
     lines: () => lines,
+    questions: () => questions,
+    nextQuestion: () =>
+      new Promise<HostQuestion>((handed, fail) => {
+        const unread = questions[read];
+        if (unread !== undefined) {
+          read += 1;
+          handed(unread);
+          return;
+        }
+        const timer = setTimeout(() => {
+          waiting = null;
+          fail(new Error(`the Plugin Server asked the Host nothing in ${ANSWER_TIMEOUT_MS} ms.\n${output}`));
+        }, ANSWER_TIMEOUT_MS);
+        waiting = (question) => {
+          clearTimeout(timer);
+          handed(question);
+        };
+      }),
+    answerAsHost: (id, answer) => send({ jsonrpc: '2.0', id, ...answer }),
     output: () => output,
     ended: (within = ANSWER_TIMEOUT_MS) =>
       Promise.race([

@@ -64,6 +64,33 @@ test('a file from the first scribe keeps its Call and gets its Minutes made', as
   assert.equal(plugin.output(), '');
 });
 
+test('a file from before the Topics keeps its Minutes, and gets Topics when made again', async (t) => {
+  const directory = await makeDirectory(t);
+  const old = new DatabaseSync(join(directory, 'scribe.db'));
+  old.exec(VERSION_1);
+  old.exec('ALTER TABLE calls ADD COLUMN title_given INTEGER NOT NULL DEFAULT 0');
+  old.exec("UPDATE calls SET minutes = '## Velhas', minutes_state = 'made' WHERE id = 1");
+  old.exec('PRAGMA user_version = 2');
+  old.close();
+  const plugin = await startedAndShaken(t, {
+    directory,
+    env: { SCRIBE_MINUTES_COMMAND: join(FIXTURES, 'minutes') },
+  });
+
+  const before = await getCall(plugin, 1);
+  await plugin.call('make_minutes', { id: 1 });
+  const after = await until(
+    plugin,
+    1,
+    (call) => call.minutesState === 'made' && call.topics !== null,
+  );
+
+  assert.equal(before.minutes, '## Velhas');
+  assert.equal(before.topics, null);
+  assert.ok(after.topics?.includes('Prazo da entrega'), after.topics ?? '');
+  assert.equal(plugin.output(), '');
+});
+
 test('a file at a schema newer than this scribe knows is refused with a sentence', async (t) => {
   const directory = await makeDirectory(t);
   const newer = new DatabaseSync(join(directory, 'scribe.db'));

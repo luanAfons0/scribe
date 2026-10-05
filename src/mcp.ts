@@ -57,8 +57,14 @@ export function badInput(sentence: string): Error {
   return Object.assign(new Error(sentence), { code: INVALID_PARAMS });
 }
 
-/** Serve these tools to the Host for as long as it holds the pipe open. */
-export function serve(tools: readonly Tool[]): void {
+/**
+ * Serve these tools to the Host for as long as it holds the pipe open, and
+ * hand every answer to a question this Plugin Server asked to `answered`.
+ */
+export function serve(
+  tools: readonly Tool[],
+  answered: (message: Readonly<Record<string, unknown>>) => void,
+): void {
   const byName = new Map(tools.map((tool) => [tool.name, tool]));
   createInterface({ input: process.stdin }).on('line', (line) => {
     if (line.trim() === '') return;
@@ -70,8 +76,12 @@ export function serve(tools: readonly Tool[]): void {
       return;
     }
     // A message that names no method answers something this Plugin Server
-    // asked. It asks nothing, so there is nothing to do with one.
-    if (message.method === undefined) return;
+    // asked over the Tool Bus (FirstMate ADR-0009). Its id is this end's own,
+    // never the Host's, so the two never mix.
+    if (message.method === undefined) {
+      answered(message as Readonly<Record<string, unknown>>);
+      return;
+    }
     // A notification carries no id and is never answered.
     if (message.id === undefined || message.id === null) return;
     dispatch(byName, message.id, message);
@@ -79,7 +89,7 @@ export function serve(tools: readonly Tool[]): void {
 }
 
 /** One line on stdout, which is the whole of what this Plugin Server says. */
-function reply(message: unknown): void {
+export function reply(message: unknown): void {
   process.stdout.write(`${JSON.stringify(message)}\n`);
 }
 
