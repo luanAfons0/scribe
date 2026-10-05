@@ -8,6 +8,7 @@
  */
 import type { Track } from './audio.ts';
 import { badInput } from './mcp.ts';
+import type { Made } from './minutes.ts';
 import { now, type Store } from './store.ts';
 
 /** Where a Call stands. */
@@ -47,6 +48,12 @@ export type CallView = CallSummary & {
   readonly minutesState: MinutesState;
   /** Why the Minutes could not be made, when they could not. */
   readonly minutesError: string | null;
+  /** The Topics the command wrote with the Minutes, for Worklog. */
+  readonly topics: string | null;
+  /** The id Worklog gave this Call's Entry, once one was sent. */
+  readonly entryId: number | null;
+  /** Why the last Entry could not be sent to Worklog, when it could not. */
+  readonly entryError: string | null;
 };
 
 type CallRow = {
@@ -59,6 +66,9 @@ type CallRow = {
   readonly minutes: string | null;
   readonly minutes_state: MinutesState;
   readonly minutes_error: string | null;
+  readonly topics: string | null;
+  readonly entry_id: number | null;
+  readonly entry_error: string | null;
 };
 
 const SPEAKERS: Readonly<Record<Track, Speaker>> = { mic: 'Você', tab: 'Outros' };
@@ -126,6 +136,9 @@ export function viewOf(store: Store, id: number, transcribing: boolean): CallVie
     minutes: row.minutes,
     minutesState: row.minutes_state,
     minutesError: row.minutes_error,
+    topics: row.topics,
+    entryId: row.entry_id,
+    entryError: row.entry_error,
   };
 }
 
@@ -142,16 +155,28 @@ export function setMinutesState(
 }
 
 /**
- * Keep the Minutes a command made, and its title, unless the operator gave
- * the Call one of their own.
+ * Keep the Minutes a command made, with its Topics, and its title unless the
+ * operator gave the Call one of their own.
  */
-export function keepMinutes(store: Store, id: number, minutes: string, title: string | null): void {
+export function keepMinutes(store: Store, id: number, made: Made): void {
   store
     .prepare(
-      "UPDATE calls SET minutes = ?, minutes_state = 'made', minutes_error = NULL, " +
+      "UPDATE calls SET minutes = ?, topics = ?, minutes_state = 'made', minutes_error = NULL, " +
         'title = CASE WHEN title_given = 1 OR ? IS NULL THEN title ELSE ? END WHERE id = ?',
     )
-    .run(minutes, title, title, id);
+    .run(made.minutes, made.topics, made.title, made.title, id);
+}
+
+/** Keep the id of the Entry Worklog made for a Call, and forget any old error. */
+export function keepEntry(store: Store, id: number, entryId: number): void {
+  store
+    .prepare('UPDATE calls SET entry_id = ?, entry_error = NULL WHERE id = ?')
+    .run(entryId, id);
+}
+
+/** Say why a Call's Entry could not be sent to Worklog. */
+export function setEntryError(store: Store, id: number, error: string): void {
+  store.prepare('UPDATE calls SET entry_error = ? WHERE id = ?').run(error, id);
 }
 
 /** Minutes left `making` by a Plugin Server that went away: they never came. */

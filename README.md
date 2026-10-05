@@ -50,6 +50,8 @@ The Plugin Server reads these from its environment, which is the Host's:
 | `SCRIBE_MINUTES_COMMAND` | The command that makes the Minutes. Optional; see below. |
 | `SCRIBE_NODE`            | The Node 24 that `mcp` runs, when `PATH` has none.       |
 | `SCRIBE_CUT_AFTER_MS`    | How long a Call may go without audio before it is Cut. Default 60000. |
+| `SCRIBE_WORKLOG_PLUGIN`  | The Registry name of the Worklog Plugin a Call's Entry goes to. Optional; see below. |
+| `SCRIBE_WORKLOG_WAIT_MS` | How long scribe waits for Worklog to answer. Default 30000. |
 
 With `SCRIBE_WHISPER` or `SCRIBE_WHISPER_MODEL` not set, or not a file, the
 Plugin Server exits at start with one sentence that names it, and the Index
@@ -116,7 +118,11 @@ and reads the Minutes from its stdout. The rules ask for:
   each;
 - `Decisões` and `Próximos passos` at the end;
 - the language of the Call;
-- a title on the first line, which replaces the date and time in the list.
+- a title on the first line, which replaces the date and time in the list;
+- the Topics after the Minutes: what the Call talked about and a short
+  summary, at most 20 lines. scribe takes them out of the Minutes and keeps
+  them apart, for Worklog. A command that leaves them out still gives
+  Minutes.
 
 The Call's page shows the Minutes formatted. **Make Minutes again** runs the
 command again, for example after you edit the Jottings, and on a Cut Call it
@@ -157,6 +163,37 @@ through nvm needs one too, such as `/home/you/.nvm/versions/node/v24.15.0/bin/co
 With no command set, recording and the Transcript still work. Only Make Minutes
 is refused, with a sentence that names `SCRIBE_MINUTES_COMMAND`. A command that
 fails leaves the Minutes failed, with the last line it said on stderr.
+
+### An Entry in Worklog
+
+When the command makes a Call's Minutes, scribe can send its Topics to
+[Worklog](https://github.com/luanAfons0/worklog) as one `Done` Entry in the
+current Cycle, over the FirstMate Tool Bus. The Entry is titled with the
+Call's times, in this machine's time zone, and its title:
+
+```
+Reunião 14:00 - 15:10: Prazo da entrega
+```
+
+Its body is the Topics. Nothing else leaves scribe: not the Jottings, not the
+Transcript, not the Minutes.
+
+Turn it on in two steps. Give scribe a Grant to call Worklog, and name
+Worklog in the service's drop-in, then restart the Host:
+
+```sh
+firstmate grant scribe worklog
+```
+
+```ini
+Environment=SCRIBE_WORKLOG_PLUGIN=worklog
+```
+
+**Make Minutes again** changes the same Entry rather than adding one. Minutes
+edited by hand send nothing. When the Entry cannot be sent — no Grant,
+Worklog Stopped, no answer, or Minutes with no Topics — the Minutes stay as
+they are, and the Call's page says why. Without `SCRIBE_WORKLOG_PLUGIN`, scribe
+sends nothing and says nothing.
 
 ### Find a Call again
 

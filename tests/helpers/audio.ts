@@ -73,6 +73,9 @@ export type Call = {
   readonly minutes: string | null;
   readonly minutesState: 'none' | 'making' | 'made' | 'failed';
   readonly minutesError: string | null;
+  readonly topics: string | null;
+  readonly entryId: number | null;
+  readonly entryError: string | null;
 };
 
 /** One Call, by id. */

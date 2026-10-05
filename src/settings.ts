@@ -7,7 +7,8 @@
  * Whisper is what the Plugin is for, so a missing executable or model is one
  * sentence and an exit at start, and the Plugin shows Stopped. The Minutes
  * command is not: with none set, a Call still records and its Transcript is
- * still made, and only Make Minutes is refused (ADR-0002).
+ * still made, and only Make Minutes is refused (ADR-0002). Worklog is not
+ * either: with no Worklog Plugin named, no Entry is sent and nothing is said.
  */
 import { accessSync, constants, statSync } from 'node:fs';
 
@@ -19,6 +20,13 @@ export const MODEL_VARIABLE = 'SCRIBE_WHISPER_MODEL';
 export const MINUTES_VARIABLE = 'SCRIBE_MINUTES_COMMAND';
 /** How long a recording Call may go without audio before it is Cut. */
 export const CUT_VARIABLE = 'SCRIBE_CUT_AFTER_MS';
+/** The environment variable that names the Worklog Plugin a Call's Entry goes to. */
+export const WORKLOG_VARIABLE = 'SCRIBE_WORKLOG_PLUGIN';
+/** How long scribe waits for Worklog to answer. */
+export const WORKLOG_WAIT_VARIABLE = 'SCRIBE_WORKLOG_WAIT_MS';
+
+/** Worklog answers at once; this much is a Plugin Server that is not there. */
+const WORKLOG_WAIT_MS = 30_000;
 
 /** A page sends audio every 5 s, so a minute of none means it went away. */
 const CUT_AFTER_MS = 60_000;
@@ -32,6 +40,10 @@ export type Settings = {
   readonly minutesCommand: string | null;
   /** How long a recording Call may go without audio before it is Cut. */
   readonly cutAfterMs: number;
+  /** The Registry name of the Worklog Plugin, or null when no Entry is sent. */
+  readonly worklogPlugin: string | null;
+  /** How long scribe waits for Worklog to answer. */
+  readonly worklogWaitMs: number;
 };
 
 /** Read the settings, or throw a sentence that names the one that is wrong. */
@@ -41,6 +53,12 @@ export function readSettings(env: NodeJS.ProcessEnv = process.env): Settings {
     model: file(MODEL_VARIABLE, env[MODEL_VARIABLE], 'the whisper.cpp model file'),
     minutesCommand: nonEmpty(env[MINUTES_VARIABLE]),
     cutAfterMs: milliseconds(CUT_VARIABLE, env[CUT_VARIABLE], CUT_AFTER_MS),
+    worklogPlugin: nonEmpty(env[WORKLOG_VARIABLE]),
+    worklogWaitMs: milliseconds(
+      WORKLOG_WAIT_VARIABLE,
+      env[WORKLOG_WAIT_VARIABLE],
+      WORKLOG_WAIT_MS,
+    ),
   };
 }
 

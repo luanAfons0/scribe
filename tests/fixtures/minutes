@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // A fixture Minutes command: it reads the prompt on stdin the way a model
 // would, keeps a copy where SCRIBE_TEST_PROMPT_LOG says, and prints a title
-// and fixed Minutes. With SCRIBE_TEST_MINUTES_FAIL set, it fails the way a
-// command with no model does: a sentence on stderr and a non-zero exit.
+// and fixed Minutes, then fixed Topics. With SCRIBE_TEST_MINUTES_FAIL set, it
+// fails the way a command with no model does: a sentence on stderr and a
+// non-zero exit. SCRIBE_TEST_TOPICS=none leaves the Topics out, the way a
+// model that forgets a rule does; SCRIBE_TEST_TOPICS=long writes 25 lines.
 import { writeFileSync } from 'node:fs';
 
 let prompt = '';
@@ -15,8 +17,15 @@ process.stdin.on('end', () => {
     process.exit(3);
   }
   const lines = (prompt.match(/\] (Você|Outros): /g) || []).length;
+  const topics =
+    process.env.SCRIBE_TEST_TOPICS === 'none'
+      ? ''
+      : process.env.SCRIBE_TEST_TOPICS === 'long'
+        ? `\n<topics>\n${Array.from({ length: 25 }, (_, i) => `- Tópico ${i + 1}`).join('\n')}\n</topics>\n`
+        : '\n<topics>\n- Prazo da entrega\n\nCombinamos a entrega para sexta.\n</topics>\n';
   process.stdout.write(
     'TITLE: Prazo da entrega\n\n## Prazo\n- Entrega na **sexta**.\n\n' +
-      `## Decisões\n- ${lines} linhas lidas.\n\n## Próximos passos\n- Nenhuma.\n`,
+      `## Decisões\n- ${lines} linhas lidas.\n\n## Próximos passos\n- Nenhuma.\n` +
+      topics,
   );
 });

@@ -35,6 +35,13 @@ They keep your headings and their order, and end with `Decisões` and
 `Próximos passos`.
 _Avoid_: summary, enhanced notes, recap
 
+**Topics**:
+The few lines Worklog gets from a Call: the topics it talked about, then a
+summary of one to three sentences, at most 20 lines, in the language of the
+Call. The Minutes command writes them in the same answer as the Minutes, and
+they are never part of the Minutes.
+_Avoid_: summary, recap, digest
+
 **Cut**:
 A Call that ended because its recording page or its Plugin Server went away,
 not because you pressed Stop. It keeps its Jottings and its Transcript so far,
@@ -43,7 +50,9 @@ _Avoid_: crashed, failed, aborted
 
 ## Relationships
 
-- A Call has one set of Jottings, one Transcript and at most one Minutes.
+- A Call has one set of Jottings, one Transcript, at most one Minutes and at
+  most one set of Topics. The Topics change only when the command makes the
+  Minutes again, never when the Minutes are edited by hand.
 - A Transcript line comes from one track: the mic (`Você`) or the tab (`Outros`).
   scribe tells people apart by track and nothing else.
 - The Minutes are made from the Jottings and the Transcript by a command you

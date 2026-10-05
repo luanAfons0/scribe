@@ -55,6 +55,18 @@ const STEPS: readonly string[] = [
   `
   ALTER TABLE calls ADD COLUMN title_given INTEGER NOT NULL DEFAULT 0;
   `,
+  // The Topics come with the Minutes the command made, for Worklog. A Call
+  // from before them has none until its Minutes are made again.
+  `
+  ALTER TABLE calls ADD COLUMN topics TEXT;
+  `,
+  // The Worklog Entry a Call's Topics went to, kept so that making the
+  // Minutes again changes that Entry rather than adding one, and the sentence
+  // that says why the last one could not be sent.
+  `
+  ALTER TABLE calls ADD COLUMN entry_id INTEGER;
+  ALTER TABLE calls ADD COLUMN entry_error TEXT;
+  `,
 ];
 
 /** Open `scribe.db`, and bring it up to the current version. */
