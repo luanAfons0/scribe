@@ -8,7 +8,12 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { getCall, until } from './helpers/audio.ts';
-import { FIXTURES, makeDirectory, startedAndShaken, startPluginServer } from './helpers/plugin.ts';
+import {
+  makeDirectory,
+  minutesCommand,
+  startedAndShaken,
+  startPluginServer,
+} from './helpers/plugin.ts';
 
 /** The schema the first scribe wrote, at version 1, with one Call in it. */
 const VERSION_1 = `
@@ -48,7 +53,7 @@ test('a file from the first scribe keeps its Call and gets its Minutes made', as
   old.close();
   const plugin = await startedAndShaken(t, {
     directory,
-    env: { SCRIBE_MINUTES_COMMAND: join(FIXTURES, 'minutes') },
+    env: { SCRIBE_MINUTES_COMMAND: minutesCommand() },
   });
 
   const before = await getCall(plugin, 1);
@@ -74,7 +79,7 @@ test('a file from before the Topics keeps its Minutes, and gets Topics when made
   old.close();
   const plugin = await startedAndShaken(t, {
     directory,
-    env: { SCRIBE_MINUTES_COMMAND: join(FIXTURES, 'minutes') },
+    env: { SCRIBE_MINUTES_COMMAND: minutesCommand() },
   });
 
   const before = await getCall(plugin, 1);

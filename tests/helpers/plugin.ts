@@ -1,6 +1,7 @@
 /**
- * The one test seam for the Plugin Server: the real `mcp`, spawned against a
- * temporary Plugin directory, spoken to exactly as the Host speaks to it.
+ * The one test seam for the Plugin Server: the real `mcp.ts`, run by the
+ * running Node with no shell, as the Host runs it (FirstMate ADR-0028), against
+ * a temporary Plugin directory, spoken to exactly as the Host speaks to it.
  *
  * Nothing here imports a module of the Plugin. What a test may see is what the
  * Host may see: the JSON-RPC lines on stdout, the diagnostics on stderr, the
@@ -34,15 +35,31 @@ const REPOSITORY = dirname(TESTS);
 /** Where the fixture executables and files live. */
 export const FIXTURES = join(TESTS, 'fixtures');
 
+/**
+ * A fixture executable in the form this system runs. On Windows that is the
+ * `.cmd` beside it, which hands the same script to `node`.
+ */
+export function fixture(name: string): string {
+  return join(FIXTURES, process.platform === 'win32' ? `${name}.cmd` : name);
+}
+
+/** `SCRIBE_MINUTES_COMMAND` for the fixture Minutes command, followed by `args`. */
+export function minutesCommand(...args: readonly string[]): string {
+  return JSON.stringify([fixture('minutes'), ...args]);
+}
+
 /** The settings a Plugin Server gets unless a test gives its own. */
 const SETTINGS: Readonly<Record<string, string>> = {
-  SCRIBE_WHISPER: join(FIXTURES, 'whisper'),
+  SCRIBE_WHISPER: fixture('whisper'),
   SCRIBE_WHISPER_MODEL: join(FIXTURES, 'model.bin'),
   SCRIBE_MINUTES_COMMAND: '',
 };
 
-/** The `mcp` executable the Host would run. Tests run the same file. */
-export const EXECUTABLE = join(REPOSITORY, 'mcp');
+/** The `mcp.ts` entry point the Host runs with its own Node, on every system. */
+export const ENTRY = join(REPOSITORY, 'mcp.ts');
+
+/** The `sh` wrapper `mcp`, which the Host runs only in a `wsl` Place. */
+export const WRAPPER = join(REPOSITORY, 'mcp');
 
 /** The protocol version the Host sends in its handshake. */
 export const PROTOCOL_VERSION = '2025-06-18';
@@ -64,6 +81,8 @@ export type StartOptions = {
    * test that restarts the Plugin Server passes the directory of the first.
    */
   readonly directory?: string;
+  /** Start the `sh` wrapper `mcp` instead, as the Host does in a `wsl` Place. */
+  readonly wrapper?: boolean;
 };
 
 /** A question the Plugin Server put to the Host over the Tool Bus. */
@@ -106,10 +125,22 @@ export type Started = {
   kill(): void;
 };
 
+/**
+ * What stops each Plugin Server a test started, by the directory it runs in.
+ * Windows will not remove a directory a process runs in, so a directory is
+ * removed only once every Plugin Server in it has stopped.
+ */
+const running = new Map<string, Array<() => Promise<void>>>();
+
 /** A temporary Plugin directory for one test, removed when the test ends. */
 export async function makeDirectory(t: TestContext): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), 'scribe-test-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(async () => {
+    await Promise.all((running.get(directory) ?? []).map((stop) => stop()));
+    running.delete(directory);
+    // whisper.cpp may still be reading a window as its Plugin Server is ended.
+    await rm(directory, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+  });
   return directory;
 }
 
@@ -123,7 +154,9 @@ export async function startPluginServer(
 ): Promise<Started> {
   const directory = options.directory ?? (await makeDirectory(t));
 
-  const child = spawn(EXECUTABLE, [], {
+  const [program, args] =
+    options.wrapper === true ? [WRAPPER, []] : [process.execPath, [ENTRY]];
+  const child = spawn(program, args, {
     cwd: directory,
     env: { ...process.env, ...SETTINGS, ...options.env },
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -203,11 +236,13 @@ export async function startPluginServer(
     answered(message as Answer);
   }
 
-  t.after(async () => {
+  const stop = async (): Promise<void> => {
     child.stdin!.end();
     child.kill('SIGTERM');
     if (ending === null) await ended;
-  });
+  };
+  running.set(directory, [...(running.get(directory) ?? []), stop]);
+  t.after(stop);
 
   function askFor(method: string, params?: unknown): Promise<Answer> {
     const id = `test-${(counter += 1)}`;

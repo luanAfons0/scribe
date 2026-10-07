@@ -8,9 +8,9 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
 import { getCall, pcm, send, startCall, until } from './helpers/audio.ts';
-import { FIXTURES, makeDirectory, startedAndShaken, type Started } from './helpers/plugin.ts';
+import { minutesCommand, makeDirectory, startedAndShaken, type Started } from './helpers/plugin.ts';
 
-const COMMAND = join(FIXTURES, 'minutes');
+const COMMAND = minutesCommand();
 
 /** A Call with a line on the mic, stopped. */
 async function stoppedCall(plugin: Started): Promise<number> {

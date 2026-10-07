@@ -44,14 +44,22 @@ test('with SCRIBE_WHISPER naming a directory, it exits with a sentence that name
   assertOneSentenceNaming(await refusedWith(t, { SCRIBE_WHISPER: directory }), 'SCRIBE_WHISPER');
 });
 
-test('with SCRIBE_WHISPER naming a file that may not be run, it exits with a sentence', async (t) => {
-  const directory = await makeDirectory(t);
-  const file = join(directory, 'whisper-cli');
-  await writeFile(file, '');
-  await chmod(file, 0o644);
+/** Windows has no mode bit that stops a file from being run. */
+const NO_MODE_BITS = process.platform === 'win32' ? 'Windows runs a file by its extension' : false;
 
-  assertOneSentenceNaming(await refusedWith(t, { SCRIBE_WHISPER: file }), 'SCRIBE_WHISPER');
-});
+test(
+  'with SCRIBE_WHISPER naming a file that may not be run, it exits with a sentence',
+  { skip: NO_MODE_BITS },
+  async (t) => {
+    const directory = await makeDirectory(t);
+    const file = join(directory, 'whisper-cli');
+    await writeFile(file, '');
+    await chmod(file, 0o644);
+
+    assertOneSentenceNaming(await refusedWith(t, { SCRIBE_WHISPER: file }), 'SCRIBE_WHISPER');
+  },
+);
+
 
 test('with SCRIBE_WHISPER_MODEL not set, it exits with a sentence that names it', async (t) => {
   const refused = await refusedWith(t, { SCRIBE_WHISPER_MODEL: '' });

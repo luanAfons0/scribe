@@ -8,7 +8,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
 import { getCall, pcm, send, startCall, transcribed, until } from './helpers/audio.ts';
-import { FIXTURES, startedAndShaken, structureOf, type Started } from './helpers/plugin.ts';
+import { minutesCommand, startedAndShaken, structureOf, type Started } from './helpers/plugin.ts';
 
 type Listed = { calls: { id: number; title: string | null; state: string }[] };
 
@@ -54,7 +54,7 @@ test('a Call renamed and its Minutes edited read back as given', async (t) => {
 
 test('a title given by hand is kept when the Minutes are made again', async (t) => {
   const plugin = await startedAndShaken(t, {
-    env: { SCRIBE_MINUTES_COMMAND: join(FIXTURES, 'minutes') },
+    env: { SCRIBE_MINUTES_COMMAND: minutesCommand() },
   });
   const id = await finishedCall(plugin);
   await until(plugin, id, (call) => call.minutesState === 'made');

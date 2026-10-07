@@ -3,7 +3,8 @@
 scribe makes the Minutes by running the command in `SCRIBE_MINUTES_COMMAND`.
 It writes the prompt — the Jottings, the Transcript and the rules — to the
 command's stdin, and reads the Minutes from its stdout. scribe knows no model,
-holds no key and has no default command.
+holds no key and has no default command. The command is a program and its
+arguments, run with no shell (ADR-0003).
 
 Any tool that reads a prompt and prints text will do: a local model through
 `ollama run`, or a cloud CLI. The operator chose Claude Code in print mode

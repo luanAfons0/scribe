@@ -18,6 +18,8 @@ export const WHISPER_VARIABLE = 'SCRIBE_WHISPER';
 export const MODEL_VARIABLE = 'SCRIBE_WHISPER_MODEL';
 /** The environment variable that names the command that makes the Minutes. */
 export const MINUTES_VARIABLE = 'SCRIBE_MINUTES_COMMAND';
+/** How long the Minutes command may run before it is ended. */
+export const MINUTES_TIMEOUT_VARIABLE = 'SCRIBE_MINUTES_TIMEOUT_MS';
 /** How long a recording Call may go without audio before it is Cut. */
 export const CUT_VARIABLE = 'SCRIBE_CUT_AFTER_MS';
 /** The environment variable that names the Worklog Plugin a Call's Entry goes to. */
@@ -28,6 +30,9 @@ export const WORKLOG_WAIT_VARIABLE = 'SCRIBE_WORKLOG_WAIT_MS';
 /** Worklog answers at once; this much is a Plugin Server that is not there. */
 const WORKLOG_WAIT_MS = 30_000;
 
+/** A model on a CPU may take this long before the Minutes command is given up on. */
+const MINUTES_TIMEOUT_MS = 15 * 60_000;
+
 /** A page sends audio every 5 s, so a minute of none means it went away. */
 const CUT_AFTER_MS = 60_000;
 
@@ -36,8 +41,14 @@ export type Settings = {
   readonly whisper: string;
   /** The absolute path of the whisper.cpp model file. */
   readonly model: string;
-  /** The command line that makes the Minutes, or null when none is set. */
+  /**
+   * The command that makes the Minutes, as the JSON text it was set to, or null
+   * when none is set. It is read when Minutes are made, so a wrong one refuses
+   * Make Minutes and never stops a Call from recording (ADR-0002).
+   */
   readonly minutesCommand: string | null;
+  /** How long the Minutes command may run before it is ended. */
+  readonly minutesTimeoutMs: number;
   /** How long a recording Call may go without audio before it is Cut. */
   readonly cutAfterMs: number;
   /** The Registry name of the Worklog Plugin, or null when no Entry is sent. */
@@ -52,6 +63,11 @@ export function readSettings(env: NodeJS.ProcessEnv = process.env): Settings {
     whisper: executable(WHISPER_VARIABLE, env[WHISPER_VARIABLE], 'the whisper.cpp executable'),
     model: file(MODEL_VARIABLE, env[MODEL_VARIABLE], 'the whisper.cpp model file'),
     minutesCommand: nonEmpty(env[MINUTES_VARIABLE]),
+    minutesTimeoutMs: milliseconds(
+      MINUTES_TIMEOUT_VARIABLE,
+      env[MINUTES_TIMEOUT_VARIABLE],
+      MINUTES_TIMEOUT_MS,
+    ),
     cutAfterMs: milliseconds(CUT_VARIABLE, env[CUT_VARIABLE], CUT_AFTER_MS),
     worklogPlugin: nonEmpty(env[WORKLOG_VARIABLE]),
     worklogWaitMs: milliseconds(

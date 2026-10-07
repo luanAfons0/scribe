@@ -5,15 +5,14 @@
  * would, or as a Host with no Grant would, or not at all.
  */
 import { strict as assert } from 'node:assert';
-import { join } from 'node:path';
 import test from 'node:test';
 import { getCall, pcm, send, startCall, until, type Call } from './helpers/audio.ts';
-import { FIXTURES, startedAndShaken, type Started } from './helpers/plugin.ts';
+import { minutesCommand, startedAndShaken, type Started } from './helpers/plugin.ts';
 
 const ZONE = 'America/Sao_Paulo';
 
 const SETTINGS = {
-  SCRIBE_MINUTES_COMMAND: join(FIXTURES, 'minutes'),
+  SCRIBE_MINUTES_COMMAND: minutesCommand(),
   SCRIBE_WORKLOG_PLUGIN: 'worklog',
   TZ: ZONE,
 };

@@ -4,7 +4,8 @@
 # ships node:sqlite. Every test spawns the real Plugin Server
 # against a temporary Plugin directory, with fixture executables for whisper.cpp
 # and the Minutes command, or reads web/ off disk, so nothing here needs a Host,
-# a model or a running FirstMate.
+# a model or a running FirstMate. It runs on Linux and on Windows, the two
+# systems the FirstMate App runs a Plugin on, and keeps one job name.
 name: Check
 
 on:
@@ -15,7 +16,11 @@ on:
 jobs:
   check:
     name: Types and tests
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
 
     steps:
       - uses: actions/checkout@v7

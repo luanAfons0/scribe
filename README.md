@@ -12,12 +12,14 @@ is recorded in a browser tab and why the Minutes come from a command.
 ## What it needs
 
 - **Node 24 or newer**, for TypeScript with no build step and for
-  `node:sqlite`. The Host's service `PATH` often has only an older Node, so
-  `mcp` looks for one in this order: `SCRIBE_NODE`, `node` on `PATH`, then
-  every Node under nvm. With none, it says so in one sentence and the Plugin
-  is Stopped.
+  `node:sqlite`. The Host runs `mcp.ts` with its own Node, with no shell, on
+  Windows and on Linux (FirstMate ADR-0028), so there is nothing to install.
+  In a `wsl` Place the Host runs `mcp`, an `sh` wrapper, instead. The
+  service's `PATH` there often has only an older Node, so `mcp` looks for one
+  in this order: `SCRIBE_NODE`, `node` on `PATH`, then every Node under nvm.
+  With none, it says so in one sentence and the Plugin is Stopped.
 - **whisper.cpp** and its `small` model, which turn the audio into the
-  Transcript on the CPU.
+  Transcript on the CPU. On Windows the executable is `whisper-cli.exe`.
 - **Chrome or Edge**, for the tab that records the Call. Firefox and Safari
   cannot share a tab's audio.
 
@@ -47,8 +49,9 @@ The Plugin Server reads these from its environment, which is the Host's:
 | ------------------------ | ------------------------------------------------------- |
 | `SCRIBE_WHISPER`         | The absolute path of `whisper-cli`. Required.           |
 | `SCRIBE_WHISPER_MODEL`   | The absolute path of the model file. Required.          |
-| `SCRIBE_MINUTES_COMMAND` | The command that makes the Minutes. Optional; see below. |
-| `SCRIBE_NODE`            | The Node 24 that `mcp` runs, when `PATH` has none.       |
+| `SCRIBE_MINUTES_COMMAND` | The command that makes the Minutes, as a JSON array: the program, then its arguments. Optional; see below. |
+| `SCRIBE_MINUTES_TIMEOUT_MS` | How long the Minutes command may run before it is ended. Default 900000 (15 minutes). |
+| `SCRIBE_NODE`            | The Node 24 that `mcp` runs in a `wsl` Place, when `PATH` has none. |
 | `SCRIBE_CUT_AFTER_MS`    | How long a Call may go without audio before it is Cut. Default 60000. |
 | `SCRIBE_WORKLOG_PLUGIN`  | The Registry name of the Worklog Plugin a Call's Entry goes to. Optional; see below. |
 | `SCRIBE_WORKLOG_WAIT_MS` | How long scribe waits for Worklog to answer. Default 30000. |
@@ -131,10 +134,19 @@ is how you get Minutes at all.
 scribe knows no model and holds no key (ADR-0002). Any command that reads a
 prompt on stdin and prints text will do.
 
+`SCRIBE_MINUTES_COMMAND` is a JSON array of strings: the program first, then
+each of its arguments, as `["ollama","run","<model>"]`. No shell runs it, on
+any system (ADR-0003), so each argument reaches the program exactly as it is
+written, spaces and quotes too, and there is no `&&`, no `|` and no `cd`. On
+Windows a `.cmd` or `.bat` program, such as the `claude.cmd` npm installs, is
+run through `cmd.exe` with nothing in it for `cmd.exe` to read. A program
+named with no directory is looked for on the Host's `PATH`, and on Windows
+with each extension in `PATHEXT`.
+
 **The command this project uses is Claude Code in print mode:**
 
 ```ini
-Environment="SCRIBE_MINUTES_COMMAND=/home/you/.local/bin/claude -p --tools \"\" --setting-sources \"\" --no-session-persistence --model sonnet"
+Environment='SCRIBE_MINUTES_COMMAND=["/home/you/.local/bin/claude","-p","--tools","","--setting-sources","","--no-session-persistence","--model","sonnet"]'
 ```
 
 Why each part is there:
@@ -153,16 +165,19 @@ It uses the login `claude` already has, so there is no key to set.
 > but the Jottings and every word of the Transcript go to Anthropic when the
 > Minutes are made. For a Call that must stay local, use a local model
 > instead, through [Ollama](https://ollama.com):
-> `SCRIBE_MINUTES_COMMAND=/usr/local/bin/ollama run <model>`. The same holds
-> for any other cloud CLI, such as `codex exec -`.
+> `SCRIBE_MINUTES_COMMAND=["/usr/local/bin/ollama","run","<model>"]`. The same holds
+> for any other cloud CLI, such as `["codex","exec","-"]`.
 
 The command runs under the Host's service, whose `PATH` has no nvm and no
 `~/.local/bin`. Give the command its absolute path: a command installed
 through nvm needs one too, such as `/home/you/.nvm/versions/node/v24.15.0/bin/codex`.
 
 With no command set, recording and the Transcript still work. Only Make Minutes
-is refused, with a sentence that names `SCRIBE_MINUTES_COMMAND`. A command that
-fails leaves the Minutes failed, with the last line it said on stderr.
+is refused, with a sentence that names `SCRIBE_MINUTES_COMMAND`. So is a
+command that is not a JSON array of strings, or whose program is not found. A
+command that fails leaves the Minutes failed, with the last line it said on
+stderr. A command that runs longer than `SCRIBE_MINUTES_TIMEOUT_MS` is ended
+with every process it started, and its Minutes are failed.
 
 ### An Entry in Worklog
 
@@ -225,5 +240,7 @@ start at once.
 
 ## Running it
 
-`./mcp` is the Plugin Server, as the Host runs it: MCP over stdio.
-`npm run check` checks the types and runs every test.
+`node mcp.ts` is the Plugin Server, as the Host runs it: MCP over stdio.
+`./mcp` is the same Plugin Server, as the Host runs it in a `wsl` Place.
+`npm run check` checks the types and runs every test, which CI does on Linux
+and on Windows.
