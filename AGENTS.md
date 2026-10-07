@@ -46,9 +46,11 @@ file through `update_settings`.
   the types.
 - **No runtime dependency.** MCP over stdio is the Plugin's own JSON-RPC
   (`src/mcp.ts`); the data is `node:sqlite`.
-- **whisper.cpp** is an executable the operator builds, and sets on the
-  Plugin Page. scribe runs it; it does not ship it. Without it scribe runs
-  and refuses to record (ADR-0004).
+- **whisper.cpp** is an executable scribe runs and does not ship. The
+  operator fetches a build and a model from the Plugin Page, each checked
+  against a SHA-256 pinned in `src/downloads.json`, or builds it and sets its
+  path there. Without it scribe runs and refuses to record (ADR-0004,
+  ADR-0005). A build is unpacked by scribe's own reader over `node:zlib`.
 - **Windows and Linux**, both, as the FirstMate App runs on both (FirstMate
   ADR-0028). No source file runs a shell: whisper.cpp and the Minutes command
   are a program and its arguments (ADR-0003). CI runs every test on both.
@@ -67,6 +69,14 @@ src/           the Plugin Server. Every file is one job.
                environment alone (ADR-0004).
   settings-file.ts settings.json in the Plugin directory: read it, and write
                it whole through a rename.
+  downloads.ts what can be fetched: read downloads.json, or the list
+               SCRIBE_DOWNLOADS names (ADR-0005).
+  downloads.json each whisper.cpp build and model, with its URL, size and
+               pinned SHA-256, as data.
+  fetcher.ts   fetch a build or a model when the Page asks, check it, keep it
+               under downloads/, and set it.
+  unpack.ts    a zip or a tar.gz, unpacked inside one directory, by scribe's
+               own reader over node:zlib.
   command.ts   a command's form, a JSON array of program and arguments, read
                in one place; and its program, found on the PATH.
   run.ts       run a program with no shell, on Windows and Linux, and end its
@@ -91,6 +101,8 @@ web/           the Plugin Page, as the Host serves it.
   app.js       the list of Calls, one Call, and Start and Stop.
   settings.js  the Settings view: the four settings, who decides each, and
                what is missing.
+  downloads.js the offers to fetch whisper.cpp and a model, and how far each
+               download got.
   jottings.js  keepJottings(): the box that keeps every change at once.
   markdown.js  the small Markdown renderer for the Minutes, as Worklog's.
   capture.js   startCapture(): the tab and the mic, sent in chunks (ADR-0001).
@@ -98,13 +110,15 @@ web/           the Plugin Page, as the Host serves it.
   app.css      the one stylesheet.
 tests/         one file per behaviour, plus helpers/ and fixtures/.
   fixtures/    whisper and minutes, fixture executables, each with its Windows
-               form beside it (whisper.cmd, minutes.cmd), and model.bin.
+               form beside it (whisper.cmd, minutes.cmd), and model.bin;
+               whisper-build.zip and .tar.gz, the fixture whisper packed as a
+               build; escape.zip and .tar.gz, builds that reach outside.
 docs/adr/      the decisions that are expensive to reverse.
 docs/agents/   how an agent works in this repo. See "Agent skills" below.
 ```
 
-`scribe.db`, `settings.json` and `audio/` are this machine's, not the
-project's. Git ignores all three.
+`scribe.db`, `settings.json`, `audio/` and `downloads/` are this machine's,
+not the project's. Git ignores all four.
 
 ## Code style
 
@@ -137,6 +151,9 @@ project's. Git ignores all three.
   `SCRIBE_MINUTES_COMMAND`, or through `update_settings`. Add a fixture rather than a mock, with its
   Windows form, a `.cmd` that hands it to `node`; `fixture(name)` picks the
   one this system runs.
+- **Downloads come from a local server**, `tests/helpers/server.ts`, never
+  the network. It writes the list of downloads scribe reads through
+  `SCRIBE_DOWNLOADS`, with the SHA-256 of the fixture archives.
 - The suite runs on Linux and on Windows. A test that only makes sense on one
   skips on the other and says why, as `wrapper.test.ts` does.
 - **The Page as bytes**: `tests/page.test.ts` reads `web/` off disk, because

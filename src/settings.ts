@@ -41,6 +41,11 @@ export const CUT_VARIABLE = 'SCRIBE_CUT_AFTER_MS';
 export const WORKLOG_VARIABLE = 'SCRIBE_WORKLOG_PLUGIN';
 /** How long scribe waits for Worklog to answer. */
 export const WORKLOG_WAIT_VARIABLE = 'SCRIBE_WORKLOG_WAIT_MS';
+/** How long a download may send nothing before it is given up. */
+export const FETCH_IDLE_VARIABLE = 'SCRIBE_FETCH_IDLE_MS';
+
+/** A download that sends nothing for a minute has stalled, not slowed. */
+const FETCH_IDLE_MS = 60_000;
 
 /** Worklog answers at once; this much is a Plugin Server that is not there. */
 const WORKLOG_WAIT_MS = 30_000;
@@ -59,6 +64,8 @@ export type Settings = {
   readonly cutAfterMs: number;
   /** How long scribe waits for Worklog to answer. */
   readonly worklogWaitMs: number;
+  /** How long a download may send nothing before it is given up. */
+  readonly fetchIdleMs: number;
 };
 
 /** Read the times, or throw a sentence that names the one that is wrong. */
@@ -75,6 +82,7 @@ export function readSettings(env: NodeJS.ProcessEnv = process.env): Settings {
       env[WORKLOG_WAIT_VARIABLE],
       WORKLOG_WAIT_MS,
     ),
+    fetchIdleMs: milliseconds(FETCH_IDLE_VARIABLE, env[FETCH_IDLE_VARIABLE], FETCH_IDLE_MS),
   };
 }
 

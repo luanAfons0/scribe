@@ -17,7 +17,10 @@ import {
 const TOOLS = [
   'append_audio',
   'delete_call',
+  'fetch_model',
+  'fetch_whisper',
   'get_call',
+  'get_downloads',
   'get_settings',
   'list_calls',
   'make_minutes',

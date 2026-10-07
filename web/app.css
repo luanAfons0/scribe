@@ -376,3 +376,10 @@ h3.section-label { margin-top: 24px; }
 
 .settings .acts { align-items: center; }
 .saved { color: var(--muted); }
+
+/* An offer to fetch whisper.cpp or a model, under its setting. */
+.fetch { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.fetch .setting-help { margin-top: 0; }
+.fetch-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.fetch-choice { display: inline-block; width: auto; }
+.fetch-progress { flex: 1 1 160px; height: 8px; accent-color: var(--accent); }

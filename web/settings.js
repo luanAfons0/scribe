@@ -7,6 +7,8 @@
    is saved here waits until the variable is gone. What is missing or wrong
    is the Plugin Server's own sentence, shown beside the setting it names.
 
+   Under whisper.cpp and its model, downloads.js offers to fetch them.
+
    app.js decides when the view is shown, and calls showSettings() and
    recordingProblem(). */
 'use strict';
@@ -53,9 +55,10 @@ function drawSettings(settings, fill) {
   }
 }
 
-/** Show the Settings view, with what the Plugin Server holds now. */
+/** Show the Settings view, with what the Plugin Server holds now, and what it can fetch. */
 async function showSettings() {
   drawSettings((await call('get_settings')).settings, true);
+  await showDownloads();
 }
 
 /** The sentence that says why no Call can record, or null when one can. */

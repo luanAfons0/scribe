@@ -10,6 +10,8 @@
  * Index Page shows; the journal is for what went wrong.
  */
 import { receive } from './bus.ts';
+import { readDownloads } from './downloads.ts';
+import { fetcherFor } from './fetcher.ts';
 import { sentenceFor, serve } from './mcp.ts';
 import { minutesMakerFor, type MinutesMaker } from './minutes-maker.ts';
 import { recorderFor } from './recorder.ts';
@@ -24,9 +26,14 @@ import { entrySenderFor } from './worklog-entry.ts';
 // the journal carries the reason. The Host does not start it again. What the
 // operator chooses never ends it: a missing whisper.cpp or a broken settings
 // file is said on the Plugin Page, where it is fixed (ADR-0004).
-const { settings, choices, store } = (() => {
+const { settings, choices, store, downloads } = (() => {
   try {
-    return { settings: readSettings(), choices: openChoices(), store: openStore() };
+    return {
+      settings: readSettings(),
+      choices: openChoices(),
+      store: openStore(),
+      downloads: readDownloads(),
+    };
   } catch (fault) {
     process.stderr.write(`scribe: ${sentenceFor(fault)}\n`);
     return process.exit(1);
@@ -49,4 +56,6 @@ maker = minutesMakerFor(
 );
 const recorder = recorderFor(store, transcriber, settings, choices, heard);
 
-serve(toolsFor({ store, recorder, transcriber, maker, choices }), receive);
+const fetcher = fetcherFor(downloads, choices, settings);
+
+serve(toolsFor({ store, recorder, transcriber, maker, choices, fetcher }), receive);

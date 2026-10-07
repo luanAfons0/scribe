@@ -20,6 +20,7 @@ const WEB = join(REPOSITORY, 'web');
 const PAGES = [
   { page: 'index.html', script: 'app.js' },
   { page: 'index.html', script: 'settings.js' },
+  { page: 'index.html', script: 'downloads.js' },
 ];
 
 /** Every `href` and `src` the page names, in the order it names them. */
@@ -127,4 +128,43 @@ test('settings.js loads before app.js, which shows it', async () => {
 
   assert.ok(paths.includes('settings.js'), 'index.html does not load settings.js');
   assert.ok(paths.indexOf('settings.js') < paths.indexOf('app.js'), 'settings.js loads too late');
+});
+
+test('the Settings view offers to fetch whisper.cpp and a model, each on its own, with its progress', async () => {
+  const html = await readFile(join(WEB, 'index.html'), 'utf8');
+
+  for (const id of [
+    'whisper-offer', 'fetch-whisper', 'whisper-progress', 'whisper-fetch-failed',
+    'model-choice', 'fetch-model', 'model-progress', 'model-fetch-failed',
+  ]) {
+    assert.ok(html.includes(`id="${id}"`), `index.html has no #${id}`);
+  }
+  for (const id of ['fetch-whisper', 'fetch-model']) {
+    // A button in the settings form submits it unless it says otherwise.
+    assert.match(html, new RegExp(`<button[^>]*type="button"[^>]*id="${id}"|<button[^>]*id="${id}"[^>]*type="button"`));
+  }
+});
+
+test('downloads.js fetches through the fetch tools, and only from a click', async () => {
+  const code = await readFile(join(WEB, 'downloads.js'), 'utf8');
+
+  assert.match(code, /call\('get_downloads'/);
+  assert.match(code, /call\('fetch_whisper'/);
+  assert.match(code, /call\('fetch_model'/);
+  // Nothing is fetched without the operator asking: each fetch tool is
+  // called once, in the click handler of its own button.
+  for (const [tool, button] of [['fetch_whisper', 'fetch-whisper'], ['fetch_model', 'fetch-model']]) {
+    assert.equal(code.split(`call('${tool}'`).length, 2, `${tool} is called more than once`);
+    const handler = new RegExp(
+      `getElementById\\('${button}'\\)\\.addEventListener\\('click'[\\s\\S]*?call\\('${tool}'`,
+    );
+    assert.match(code, handler, `${tool} is not called from the click of #${button}`);
+  }
+});
+
+test('downloads.js loads before app.js, which shows the Settings view', async () => {
+  const paths = pathsIn(await readFile(join(WEB, 'index.html'), 'utf8'));
+
+  assert.ok(paths.includes('downloads.js'), 'index.html does not load downloads.js');
+  assert.ok(paths.indexOf('downloads.js') < paths.indexOf('app.js'), 'downloads.js loads too late');
 });

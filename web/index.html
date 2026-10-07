@@ -119,6 +119,18 @@
           placeholder="The absolute path of whisper-cli">
         <p class="setting-from" id="whisper-from" hidden></p>
         <p class="fault setting-problem" id="whisper-problem" hidden></p>
+        <!-- Drawn by downloads.js: a build of whisper.cpp for this system,
+             fetched only on a click, or how to get one where none is
+             published. -->
+        <div class="fetch">
+          <p class="setting-help" id="whisper-offer"></p>
+          <div class="fetch-acts">
+            <button class="act" id="fetch-whisper" type="button" hidden>Fetch whisper.cpp</button>
+            <progress class="fetch-progress" id="whisper-progress" max="1" value="0"
+              hidden></progress>
+          </div>
+          <p class="fault setting-problem" id="whisper-fetch-failed" role="alert" hidden></p>
+        </div>
       </div>
       <div class="setting">
         <label class="section-label" for="set-whisperModel">whisper.cpp model</label>
@@ -126,6 +138,21 @@
           placeholder="The absolute path of ggml-small.bin">
         <p class="setting-from" id="whisperModel-from" hidden></p>
         <p class="fault setting-problem" id="whisperModel-problem" hidden></p>
+        <!-- Drawn by downloads.js: the models offered, of which the operator
+             fetches one, on its own, only on a click. -->
+        <div class="fetch">
+          <p class="setting-help">
+            Or fetch one. A bigger model hears better and takes longer; small
+            is a good start.
+          </p>
+          <div class="fetch-acts">
+            <select class="field fetch-choice" id="model-choice" aria-label="Model"></select>
+            <button class="act" id="fetch-model" type="button">Fetch model</button>
+            <progress class="fetch-progress" id="model-progress" max="1" value="0"
+              hidden></progress>
+          </div>
+          <p class="fault setting-problem" id="model-fetch-failed" role="alert" hidden></p>
+        </div>
       </div>
       <div class="setting">
         <label class="section-label" for="set-minutesCommand">Minutes command</label>
@@ -161,6 +188,7 @@
 <script src="markdown.js"></script>
 <script src="jottings.js"></script>
 <script src="capture.js"></script>
+<script src="downloads.js"></script>
 <script src="settings.js"></script>
 <script src="app.js"></script>
 </body>
