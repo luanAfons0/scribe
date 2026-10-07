@@ -35,25 +35,31 @@ test('the Plugin Page is served as index.html', async () => {
 });
 
 for (const { page, script } of PAGES) {
-  test(`every path in ${page} is relative, so nothing assumes an address it does not own`, async () => {
-    const html = await readFile(join(WEB, page), 'utf8');
+  test(
+    `every path in ${page} is relative, so nothing assumes an address it does not own`,
+    async () => {
+      const html = await readFile(join(WEB, page), 'utf8');
 
-    for (const path of pathsIn(html)) {
-      if (path.startsWith('data:')) continue;
-      assert.ok(!path.startsWith('/'), `${path} assumes it is served from the root`);
-      assert.ok(!/^[a-z]+:/i.test(path), `${path} reaches outside the Plugin`);
-    }
-  });
+      for (const path of pathsIn(html)) {
+        if (path.startsWith('data:')) continue;
+        assert.ok(!path.startsWith('/'), `${path} assumes it is served from the root`);
+        assert.ok(!/^[a-z]+:/i.test(path), `${path} reaches outside the Plugin`);
+      }
+    },
+  );
 
-  test(`every asset ${page} names is beside it in web/, because there is no build step`, async () => {
-    const html = await readFile(join(WEB, page), 'utf8');
+  test(
+    `every asset ${page} names is beside it in web/, because there is no build step`,
+    async () => {
+      const html = await readFile(join(WEB, page), 'utf8');
 
-    for (const path of pathsIn(html)) {
-      if (path.startsWith('data:') || path.startsWith('#')) continue;
-      const asset = await stat(join(WEB, path));
-      assert.ok(asset.isFile(), `${path} is named by ${page} and is not in web/`);
-    }
-  });
+      for (const path of pathsIn(html)) {
+        if (path.startsWith('data:') || path.startsWith('#')) continue;
+        const asset = await stat(join(WEB, path));
+        assert.ok(asset.isFile(), `${path} is named by ${page} and is not in web/`);
+      }
+    },
+  );
 
   test(`every element ${script} reaches for is one ${page} declares`, async () => {
     // The Page is the one part of this Plugin no test can drive, so this is
@@ -105,16 +111,23 @@ test('rpc.js calls the tools over the relative rpc address, never an absolute on
   assert.ok(!code.includes('/p/scribe'), "rpc.js names the Plugin's address by hand");
 });
 
-test('the Settings view offers each setting the operator chooses, with a place for its problem', async () => {
-  const html = await readFile(join(WEB, 'index.html'), 'utf8');
+test(
+  'the Settings view offers each setting, with a place for its problem and an ignored variable',
+  async () => {
+    const html = await readFile(join(WEB, 'index.html'), 'utf8');
 
-  for (const name of ['whisper', 'whisperModel', 'minutesCommand', 'worklogPlugin']) {
-    assert.ok(html.includes(`id="set-${name}"`), `index.html has no field for ${name}`);
-    assert.ok(html.includes(`id="${name}-problem"`), `index.html has no place for ${name}'s`);
-    assert.ok(html.includes(`id="${name}-from"`), `index.html cannot say who decides ${name}`);
-  }
-  assert.ok(html.includes('href="#settings"'), 'nothing on the Page leads to the Settings view');
-});
+    for (const name of ['whisper', 'whisperModel', 'minutesCommand', 'worklogPlugin']) {
+      assert.ok(html.includes(`id="set-${name}"`), `index.html has no field for ${name}`);
+      assert.ok(html.includes(`id="${name}-problem"`), `index.html has no place for ${name}'s`);
+      assert.ok(html.includes(`id="${name}-from"`), `index.html cannot say who decides ${name}`);
+      assert.ok(
+        html.includes(`id="${name}-ignored"`),
+        `index.html cannot say that the variable of ${name} is ignored`,
+      );
+    }
+    assert.ok(html.includes('href="#settings"'), 'nothing on the Page leads to the Settings view');
+  },
+);
 
 test('settings.js reads and changes the settings through the settings tools', async () => {
   const code = await readFile(join(WEB, 'settings.js'), 'utf8');
@@ -130,20 +143,25 @@ test('settings.js loads before app.js, which shows it', async () => {
   assert.ok(paths.indexOf('settings.js') < paths.indexOf('app.js'), 'settings.js loads too late');
 });
 
-test('the Settings view offers to fetch whisper.cpp and a model, each on its own, with its progress', async () => {
-  const html = await readFile(join(WEB, 'index.html'), 'utf8');
+test(
+  'the Settings view offers to fetch whisper.cpp and a model, each on its own, with its progress',
+  async () => {
+    const html = await readFile(join(WEB, 'index.html'), 'utf8');
 
-  for (const id of [
-    'whisper-offer', 'fetch-whisper', 'whisper-progress', 'whisper-fetch-failed',
-    'model-choice', 'fetch-model', 'model-progress', 'model-fetch-failed',
-  ]) {
-    assert.ok(html.includes(`id="${id}"`), `index.html has no #${id}`);
-  }
-  for (const id of ['fetch-whisper', 'fetch-model']) {
-    // A button in the settings form submits it unless it says otherwise.
-    assert.match(html, new RegExp(`<button[^>]*type="button"[^>]*id="${id}"|<button[^>]*id="${id}"[^>]*type="button"`));
-  }
-});
+    for (const id of [
+      'whisper-offer', 'fetch-whisper', 'whisper-progress', 'whisper-fetch-failed',
+      'model-choice', 'fetch-model', 'model-progress', 'model-fetch-failed',
+    ]) {
+      assert.ok(html.includes(`id="${id}"`), `index.html has no #${id}`);
+    }
+    for (const id of ['fetch-whisper', 'fetch-model']) {
+      // A button in the settings form submits it unless it says otherwise.
+      const button =
+        `<button[^>]*type="button"[^>]*id="${id}"|<button[^>]*id="${id}"[^>]*type="button"`;
+      assert.match(html, new RegExp(button));
+    }
+  },
+);
 
 test('downloads.js fetches through the fetch tools, and only from a click', async () => {
   const code = await readFile(join(WEB, 'downloads.js'), 'utf8');
@@ -153,13 +171,24 @@ test('downloads.js fetches through the fetch tools, and only from a click', asyn
   assert.match(code, /call\('fetch_model'/);
   // Nothing is fetched without the operator asking: each fetch tool is
   // called once, in the click handler of its own button.
-  for (const [tool, button] of [['fetch_whisper', 'fetch-whisper'], ['fetch_model', 'fetch-model']]) {
+  for (const [tool, button] of [
+    ['fetch_whisper', 'fetch-whisper'],
+    ['fetch_model', 'fetch-model'],
+  ]) {
     assert.equal(code.split(`call('${tool}'`).length, 2, `${tool} is called more than once`);
     const handler = new RegExp(
       `getElementById\\('${button}'\\)\\.addEventListener\\('click'[\\s\\S]*?call\\('${tool}'`,
     );
     assert.match(code, handler, `${tool} is not called from the click of #${button}`);
   }
+});
+
+test('downloads.js offers whisper.cpp only while it is not set or has a problem', async () => {
+  const code = await readFile(join(WEB, 'downloads.js'), 'utf8');
+
+  assert.match(code, /settings\.whisper\.value !== null && settings\.whisper\.problem === null/);
+  assert.match(code, /fetchWhisper\.hidden = !offered/);
+  assert.ok(!code.includes("'ggml-small.bin'"), 'downloads.js names the default model by hand');
 });
 
 test('downloads.js loads before app.js, which shows the Settings view', async () => {

@@ -21,7 +21,7 @@ export type EntrySender = {
   made(id: number): void;
 };
 
-/** The EntrySender, over one Store, to the Worklog Plugin the settings name when Minutes are made. */
+/** The EntrySender, over one Store, to the Worklog Plugin the settings name. */
 export function entrySenderFor(
   store: Store,
   settings: Pick<Settings, 'worklogWaitMs'>,

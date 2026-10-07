@@ -5,9 +5,11 @@
    from its own button and nowhere else. A download runs in the Plugin Server;
    this view asks how far it got while one runs, and when it ends draws the
    settings again, which now name what was fetched. A download that failed
-   leaves its one sentence under its button.
+   leaves its one sentence under its button. The offer to fetch whisper.cpp
+   is shown only while whisper.cpp is not set, or is set and cannot be run;
+   the models are always offered, the one downloads.json names first.
 
-   settings.js calls showDownloads() when the Settings view opens. */
+   settings.js calls showDownloads(settings) when the Settings view opens. */
 'use strict';
 
 /** How often the view asks how far a download got. */
@@ -21,19 +23,30 @@ function sizeText(bytes) {
   return bytes >= 1e9 ? (bytes / 1e9).toFixed(1) + ' GB' : Math.round(bytes / 1e6) + ' MB';
 }
 
+/**
+ * Whether whisper.cpp is set and can be run, as get_settings last said. The
+ * offer to fetch it is shown only when it is not.
+ */
+let whisperReady = false;
+
 /** Whether a download is in flight. */
-function fetching(fetch) {
-  return fetch !== null && fetch.failed === null;
+function inFlight(download) {
+  return download !== null && download.failed === null;
+}
+
+/** Whether a download failed, and its sentence is to be shown. */
+function failedDownload(download) {
+  return download !== null && download.failed !== null;
 }
 
 /** Draw one download: its progress while it runs, its sentence when it failed. */
-function drawFetch(fetch, button, progress, failed) {
-  const running = fetching(fetch);
+function drawDownload(download, button, progress, failed) {
+  const running = inFlight(download);
   button.disabled = running;
   progress.hidden = !running;
-  if (running) progress.value = fetch.size > 0 ? fetch.received / fetch.size : 0;
-  failed.hidden = fetch === null || fetch.failed === null;
-  failed.textContent = fetch === null || fetch.failed === null ? '' : fetch.failed;
+  if (running) progress.value = download.size > 0 ? download.received / download.size : 0;
+  failed.hidden = !failedDownload(download);
+  failed.textContent = failedDownload(download) ? download.failed : '';
 }
 
 /** Draw both offers, and ask again while a download runs. */
@@ -41,6 +54,10 @@ function drawDownloads(downloads) {
   const whisper = downloads.whisper;
   const offer = document.getElementById('whisper-offer');
   const fetchWhisper = document.getElementById('fetch-whisper');
+  // A whisper.cpp that is set and runs needs no offer, unless one is being
+  // fetched or has just failed, which the operator asked for.
+  const offered = !whisperReady || inFlight(whisper.fetch) || failedDownload(whisper.fetch);
+  offer.hidden = !offered;
   if (whisper.build === null) {
     offer.textContent = whisper.missing;
     fetchWhisper.hidden = true;
@@ -48,9 +65,9 @@ function drawDownloads(downloads) {
     offer.textContent =
       'Or fetch whisper.cpp ' + whisper.release + ' for this system, ' +
       sizeText(whisper.build.size) + ', checked before it is kept.';
-    fetchWhisper.hidden = false;
+    fetchWhisper.hidden = !offered;
   }
-  drawFetch(
+  drawDownload(
     whisper.fetch,
     fetchWhisper,
     document.getElementById('whisper-progress'),
@@ -63,18 +80,18 @@ function drawDownloads(downloads) {
       const option = document.createElement('option');
       option.value = model.name;
       option.textContent = model.name + ' · ' + sizeText(model.size);
-      option.selected = model.name === 'ggml-small.bin';
+      option.selected = model.name === downloads.models.default;
       return option;
     }));
   }
-  drawFetch(
+  drawDownload(
     downloads.models.fetch,
     document.getElementById('fetch-model'),
     document.getElementById('model-progress'),
     document.getElementById('model-fetch-failed'),
   );
 
-  const running = fetching(whisper.fetch) || fetching(downloads.models.fetch);
+  const running = inFlight(whisper.fetch) || inFlight(downloads.models.fetch);
   clearTimeout(downloadTimer);
   downloadTimer = running ? setTimeout(followDownloads, DOWNLOAD_POLL_MS) : null;
 }
@@ -90,8 +107,12 @@ async function followDownloads() {
   }
 }
 
-/** Draw the offers with what the Plugin Server holds now. */
-async function showDownloads() {
+/**
+ * Draw the offers with what the Plugin Server holds now. `settings` is what
+ * get_settings answered, which says whether whisper.cpp is set and runs.
+ */
+async function showDownloads(settings) {
+  whisperReady = settings.whisper.value !== null && settings.whisper.problem === null;
   drawDownloads((await call('get_downloads')).downloads);
 }
 

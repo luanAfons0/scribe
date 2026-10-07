@@ -13,7 +13,7 @@
  */
 import type { CallView } from './calls.ts';
 import type { Command } from './command.ts';
-import { run } from './run.ts';
+import { failureOf, run } from './run.ts';
 
 /** The most lines of Topics kept: few enough to read on a Worklog card. */
 const MOST_TOPICS_LINES = 20;
@@ -73,25 +73,11 @@ export async function makeMinutes(
   timeoutMs: number,
 ): Promise<Made> {
   const ran = await run(command, { input: prompt, timeoutMs });
-  if (ran.timedOut) {
-    throw new Error(
-      `The Minutes command ran longer than ${duration(timeoutMs)} and was stopped, with ` +
-        'every process it started.',
-    );
-  }
-  if (ran.code !== 0) {
-    const said = ran.stderr.trim().split('\n').pop() ?? '';
-    const why = said === '' ? '.' : `: ${said}`;
-    throw new Error(`The Minutes command exited with ${ran.code}${why}`);
-  }
+  const failed = failureOf(ran, 'The Minutes command', timeoutMs);
+  if (failed !== null) throw new Error(failed);
   const made = readAnswer(ran.stdout);
   if (made.minutes === '') throw new Error('The Minutes command printed no Minutes.');
   return made;
-}
-
-/** A time a person reads: whole minutes when it is, seconds otherwise. */
-function duration(ms: number): string {
-  return ms % 60_000 === 0 ? `${ms / 60_000} minutes` : `${ms / 1000} s`;
 }
 
 /** The title, the Minutes and the Topics out of what the command printed. */

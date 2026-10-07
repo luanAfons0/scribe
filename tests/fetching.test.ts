@@ -9,12 +9,13 @@
  * those of the fixture archives.
  */
 import { strict as assert } from 'node:assert';
-import { readdir } from 'node:fs/promises';
+import { mkdir, readdir, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
 import { pcm, said, send, startCall, transcribed } from './helpers/audio.ts';
 import {
   structureOf,
+  makeDirectory,
   startedAndShaken,
   type Answer,
   type Started,
@@ -47,6 +48,7 @@ type Downloads = {
   };
   readonly models: {
     readonly offered: readonly { readonly name: string; readonly size: number }[];
+    readonly default: string | null;
     readonly fetch: Fetch | null;
   };
 };
@@ -85,7 +87,7 @@ async function filesIn(directory: string): Promise<readonly string[]> {
   return found.map((path) => path.split('\\').join('/')).sort();
 }
 
-/** A server with a fixture build and the fixture model, and the list of downloads that names them. */
+/** A server with a fixture build and the fixture model, and the list of downloads naming them. */
 async function served(
   t: test.TestContext,
   options: { readonly format?: 'zip' | 'tar.gz'; readonly build?: boolean } = {},
@@ -110,6 +112,7 @@ async function served(
       { name: 'ggml-tiny.bin', ...download(server.url('/ggml-tiny.bin'), model) },
       { name: 'ggml-small.bin', ...download(server.url('/ggml-small.bin'), model) },
     ],
+    defaultModel: 'ggml-small.bin',
   });
   return { server, env: { ...UNSET, ...env } };
 }
@@ -119,61 +122,71 @@ function refusal(answer: Answer): string {
   return answer.error.message;
 }
 
-test('get_downloads offers the build for this system and the models, and fetches nothing', async (t) => {
-  const { server, env } = await served(t);
-  const plugin = await startedAndShaken(t, { env });
-
-  const seen = await downloads(plugin);
-
-  assert.equal(seen.whisper.release, 'v1.9.4');
-  assert.ok(seen.whisper.build !== null && seen.whisper.build.size > 0);
-  assert.equal(seen.whisper.missing, null);
-  assert.equal(seen.whisper.fetch, null);
-  assert.deepEqual(
-    seen.models.offered.map((model) => model.name),
-    ['ggml-tiny.bin', 'ggml-small.bin'],
-  );
-  assert.equal(seen.models.fetch, null);
-  assert.deepEqual(server.asked(), []);
-  assert.deepEqual(await filesIn(plugin.directory), ['scribe.db']);
-});
-
-for (const format of ['zip', 'tar.gz'] as const) {
-  test(`fetch_whisper fetches a ${format} build, keeps it in the Plugin directory, and sets it`, async (t) => {
-    const { server, env } = await served(t, { format });
+test(
+  'get_downloads offers the build for this system and the models, and fetches nothing',
+  async (t) => {
+    const { server, env } = await served(t);
     const plugin = await startedAndShaken(t, { env });
 
-    const started = structureOf<{ downloads: Downloads }>(await plugin.call('fetch_whisper'));
-    const seen = await settled(plugin);
-    const after = await settings(plugin);
+    const seen = await downloads(plugin);
 
-    assert.ok(started.downloads.whisper.fetch !== null);
+    assert.equal(seen.whisper.release, 'v1.9.4');
+    assert.ok(seen.whisper.build !== null && seen.whisper.build.size > 0);
+    assert.equal(seen.whisper.missing, null);
     assert.equal(seen.whisper.fetch, null);
-    assert.deepEqual(server.asked(), [`/whisper.${format}`]);
-    assert.equal(after.whisper.from, 'file');
-    assert.equal(after.whisper.problem, null);
-    assert.ok(
-      String(after.whisper.value).startsWith(plugin.directory),
-      `${after.whisper.value} is not in the Plugin directory`,
+    assert.deepEqual(
+      seen.models.offered.map((model) => model.name),
+      ['ggml-tiny.bin', 'ggml-small.bin'],
     );
-    assert.equal(after.whisperModel.value, null, 'the model was fetched without being asked for');
-  });
+    assert.equal(seen.models.default, 'ggml-small.bin');
+    assert.equal(seen.models.fetch, null);
+    assert.deepEqual(server.asked(), []);
+    assert.deepEqual(await filesIn(plugin.directory), ['scribe.db']);
+  },
+);
+
+for (const format of ['zip', 'tar.gz'] as const) {
+  test(
+    `fetch_whisper fetches a ${format} build, keeps it in the Plugin directory, and sets it`,
+    async (t) => {
+      const { server, env } = await served(t, { format });
+      const plugin = await startedAndShaken(t, { env });
+
+      const started = structureOf<{ downloads: Downloads }>(await plugin.call('fetch_whisper'));
+      const seen = await settled(plugin);
+      const after = await settings(plugin);
+
+      assert.ok(started.downloads.whisper.fetch !== null);
+      assert.equal(seen.whisper.fetch, null);
+      assert.deepEqual(server.asked(), [`/whisper.${format}`]);
+      assert.equal(after.whisper.from, 'file');
+      assert.equal(after.whisper.problem, null);
+      assert.ok(
+        String(after.whisper.value).startsWith(plugin.directory),
+        `${after.whisper.value} is not in the Plugin directory`,
+      );
+      assert.equal(after.whisperModel.value, null, 'the model was fetched without being asked for');
+    },
+  );
 }
 
-test('with whisper.cpp and a model fetched from the Page, a Call records and is transcribed', async (t) => {
-  const { env } = await served(t);
-  const plugin = await startedAndShaken(t, { env });
+test(
+  'with whisper.cpp and a model fetched from the Page, a Call records and is transcribed',
+  async (t) => {
+    const { env } = await served(t);
+    const plugin = await startedAndShaken(t, { env });
 
-  await plugin.call('fetch_whisper');
-  await plugin.call('fetch_model', { name: 'ggml-small.bin' });
-  await settled(plugin);
-  const id = await startCall(plugin);
-  await send(plugin, id, 'mic', pcm([{ seconds: 1, level: 3000 }, { seconds: 2 }]));
-  await plugin.call('stop_call', { id });
-  const call = await transcribed(plugin, id);
+    await plugin.call('fetch_whisper');
+    await plugin.call('fetch_model', { name: 'ggml-small.bin' });
+    await settled(plugin);
+    const id = await startCall(plugin);
+    await send(plugin, id, 'mic', pcm([{ seconds: 1, level: 3000 }, { seconds: 2 }]));
+    await plugin.call('stop_call', { id });
+    const call = await transcribed(plugin, id);
 
-  assert.deepEqual(said(call), ['0 Você: tone 3000']);
-});
+    assert.deepEqual(said(call), ['0 Você: tone 3000']);
+  },
+);
 
 test('fetch_model fetches the one model asked for, keeps it, and sets it', async (t) => {
   const { server, env } = await served(t);
@@ -185,21 +198,27 @@ test('fetch_model fetches the one model asked for, keeps it, and sets it', async
 
   assert.equal(seen.models.fetch, null);
   assert.deepEqual(server.asked(), ['/ggml-tiny.bin']);
-  assert.equal(after.whisperModel.value, join(plugin.directory, 'downloads', 'models', 'ggml-tiny.bin'));
+  assert.equal(
+    after.whisperModel.value,
+    join(plugin.directory, 'downloads', 'models', 'ggml-tiny.bin'),
+  );
   assert.equal(after.whisperModel.problem, null);
   assert.equal(after.whisper.value, null, 'whisper.cpp was fetched without being asked for');
 });
 
-test('a model that is not offered is refused with a sentence that names those that are', async (t) => {
-  const { server, env } = await served(t);
-  const plugin = await startedAndShaken(t, { env });
+test(
+  'a model that is not offered is refused with a sentence that names those that are',
+  async (t) => {
+    const { server, env } = await served(t);
+    const plugin = await startedAndShaken(t, { env });
 
-  const said = refusal(await plugin.call('fetch_model', { name: 'ggml-huge.bin' }));
+    const said = refusal(await plugin.call('fetch_model', { name: 'ggml-huge.bin' }));
 
-  assert.match(said, /ggml-tiny\.bin, ggml-small\.bin/);
-  assert.match(said, /"ggml-huge\.bin"/);
-  assert.deepEqual(server.asked(), []);
-});
+    assert.match(said, /ggml-tiny\.bin, ggml-small\.bin/);
+    assert.match(said, /"ggml-huge\.bin"/);
+    assert.deepEqual(server.asked(), []);
+  },
+);
 
 /** A server whose bytes are not those the list names, for the build and for a model. */
 async function tampered(t: test.TestContext, routes: Record<string, Buffer | number | 'stall'>) {
@@ -224,92 +243,200 @@ async function bothFailed(plugin: Started): Promise<readonly string[]> {
   await plugin.call('fetch_whisper');
   await plugin.call('fetch_model', { name: 'ggml-small.bin' });
   const seen = await settled(plugin);
-  return [seen.whisper.fetch?.failed ?? 'it did not fail', seen.models.fetch?.failed ?? 'it did not fail'];
+  return [
+    seen.whisper.fetch?.failed ?? 'it did not fail',
+    seen.models.fetch?.failed ?? 'it did not fail',
+  ];
 }
 
-test('a download whose SHA-256 does not match is refused in one sentence, and nothing of it is kept', async (t) => {
-  // The same size as the real bytes, one byte changed: only the SHA-256 tells them apart.
-  const changed = (bytes: Buffer): Buffer => {
-    const copy = Buffer.from(bytes);
-    copy[copy.length - 1] = (copy[copy.length - 1]! + 1) % 256;
-    return copy;
-  };
-  const env = await tampered(t, {
-    '/whisper.zip': changed(await fixtureBytes('whisper-build.zip')),
-    '/ggml-small.bin': changed(await fixtureBytes('model.bin')),
-  });
-  const plugin = await startedAndShaken(t, { env });
+test(
+  'a download whose SHA-256 does not match is refused in one sentence, and nothing of it is kept',
+  async (t) => {
+    // The same size as the real bytes, one byte changed: only the SHA-256 tells them apart.
+    const changed = (bytes: Buffer): Buffer => {
+      const copy = Buffer.from(bytes);
+      copy[copy.length - 1] = (copy[copy.length - 1]! + 1) % 256;
+      return copy;
+    };
+    const env = await tampered(t, {
+      '/whisper.zip': changed(await fixtureBytes('whisper-build.zip')),
+      '/ggml-small.bin': changed(await fixtureBytes('model.bin')),
+    });
+    const plugin = await startedAndShaken(t, { env });
 
-  const failed = await bothFailed(plugin);
-  const after = await settings(plugin);
+    const failed = await bothFailed(plugin);
+    const after = await settings(plugin);
 
-  for (const sentence of failed) {
-    assert.match(sentence, /is not the file scribe expects: its SHA-256 does not match, so nothing was kept\.$/);
-  }
-  assert.deepEqual(await filesIn(plugin.directory), ['scribe.db']);
-  assert.equal(after.whisper.value, null);
-  assert.equal(after.whisperModel.value, null);
-});
+    for (const sentence of failed) {
+      assert.match(
+        sentence,
+        /is not the file scribe expects: its SHA-256 does not match, so nothing was kept\.$/,
+      );
+    }
+    assert.deepEqual(await filesIn(plugin.directory), ['scribe.db']);
+    assert.equal(after.whisper.value, null);
+    assert.equal(after.whisperModel.value, null);
+  },
+);
 
-test('a download the server refuses is said in one sentence that names the answer, and nothing is kept', async (t) => {
-  const env = await tampered(t, { '/whisper.zip': 404, '/ggml-small.bin': 503 });
-  const plugin = await startedAndShaken(t, { env });
+test(
+  'a download the server refuses is said in one sentence naming the answer, and nothing is kept',
+  async (t) => {
+    const env = await tampered(t, { '/whisper.zip': 404, '/ggml-small.bin': 503 });
+    const plugin = await startedAndShaken(t, { env });
 
-  const [whisper, model] = await bothFailed(plugin);
+    const [whisper, model] = await bothFailed(plugin);
 
-  assert.match(whisper!, /^whisper\.cpp v0\.0\.1 could not be fetched from http:\S+\/whisper\.zip: it answered 404, so nothing was kept\.$/);
-  assert.match(model!, /^ggml-small\.bin could not be fetched from http:\S+: it answered 503, so nothing was kept\.$/);
-  assert.deepEqual(await filesIn(plugin.directory), ['scribe.db']);
-});
+    assert.match(
+      whisper ?? '',
+      /^whisper\.cpp v0\.0\.1 could not be fetched from http:\S+\/whisper\.zip: it answered 404, /,
+    );
+    assert.match(
+      model ?? '',
+      /^ggml-small\.bin could not be fetched from http:\S+: it answered 503, /,
+    );
+    for (const sentence of [whisper, model]) {
+      assert.match(sentence ?? '', /, so nothing was kept\.$/);
+    }
+    assert.deepEqual(await filesIn(plugin.directory), ['scribe.db']);
+  },
+);
 
-test('a download that goes quiet is given up after SCRIBE_FETCH_IDLE_MS, and a second ask waits for it', async (t) => {
-  const env = await tampered(t, { '/whisper.zip': 'stall', '/ggml-small.bin': 'stall' });
-  const plugin = await startedAndShaken(t, { env: { ...env, SCRIBE_FETCH_IDLE_MS: '300' } });
+test(
+  'a download that goes quiet is given up after SCRIBE_FETCH_IDLE_MS, and a second ask waits',
+  async (t) => {
+    const env = await tampered(t, { '/whisper.zip': 'stall', '/ggml-small.bin': 'stall' });
+    const plugin = await startedAndShaken(t, { env: { ...env, SCRIBE_FETCH_IDLE_MS: '300' } });
 
-  await plugin.call('fetch_whisper');
-  const again = refusal(await plugin.call('fetch_whisper'));
-  const seen = await settled(plugin);
+    await plugin.call('fetch_whisper');
+    const again = refusal(await plugin.call('fetch_whisper'));
+    const seen = await settled(plugin);
 
-  assert.match(again, /being fetched already/);
-  assert.match(seen.whisper.fetch?.failed ?? '', /it sent nothing for 300 ms, so nothing was kept\.$/);
-  assert.deepEqual(await filesIn(plugin.directory), ['scribe.db']);
-});
+    assert.match(again, /being fetched already/);
+    const failed = seen.whisper.fetch?.failed ?? '';
+    assert.match(failed, /it sent nothing for 300 ms, so nothing was kept\.$/);
+    assert.deepEqual(await filesIn(plugin.directory), ['scribe.db']);
+  },
+);
 
 for (const format of ['zip', 'tar.gz'] as const) {
-  test(`a ${format} build with an entry that leaves its directory is refused, and nothing is kept`, async (t) => {
-    const archive = await fixtureBytes(`escape.${format}`);
-    const server = await serveFiles(t, { [`/escape.${format}`]: archive });
-    const env = await downloadsFile(t, {
-      builds: {
-        [SYSTEM]: {
-          ...download(server.url(`/escape.${format}`), archive),
-          format,
-          program: 'build/whisper',
+  test(
+    `a ${format} build with an entry that leaves its directory is refused, and nothing is kept`,
+    async (t) => {
+      const archive = await fixtureBytes(`escape.${format}`);
+      const server = await serveFiles(t, { [`/escape.${format}`]: archive });
+      const env = await downloadsFile(t, {
+        builds: {
+          [SYSTEM]: {
+            ...download(server.url(`/escape.${format}`), archive),
+            format,
+            program: 'build/whisper',
+          },
         },
-      },
-      models: [],
-    });
-    const plugin = await startedAndShaken(t, { env: { ...UNSET, ...env } });
+        models: [],
+      });
+      const plugin = await startedAndShaken(t, { env: { ...UNSET, ...env } });
+
+      await plugin.call('fetch_whisper');
+      const seen = await settled(plugin);
+
+      const failed = seen.whisper.fetch?.failed ?? '';
+      assert.match(failed, /could not be unpacked: .*(outside|names no file)/);
+      assert.deepEqual(await filesIn(plugin.directory), ['scribe.db']);
+    },
+  );
+}
+
+test(
+  'where whisper.cpp publishes no build, the Page is told how to get one, and a path is taken',
+  async (t) => {
+    const { server, env } = await served(t, { build: false });
+    const plugin = await startedAndShaken(t, { env });
+
+    const seen = await downloads(plugin);
+    const refused = refusal(await plugin.call('fetch_whisper'));
+    const whisper = join(plugin.directory, 'whisper-cli');
+    const saved = await plugin.call('update_settings', { whisper });
+
+    assert.equal(seen.whisper.build, null);
+    assert.match(
+      seen.whisper.missing ?? '',
+      /publishes no build for .*https:\/\/github\.com\/ggml-org\/whisper\.cpp.*absolute path/,
+    );
+    assert.equal(refused, seen.whisper.missing);
+    assert.equal(saved.error, undefined);
+    assert.deepEqual(server.asked(), []);
+  },
+);
+
+test('a download a stopped Plugin Server left half done is gone at the next start', async (t) => {
+  const directory = await makeDirectory(t);
+  const build = join(directory, 'downloads', 'whisper.cpp');
+  const models = join(directory, 'downloads', 'models');
+  await mkdir(join(build, `v1.9.4-${SYSTEM}.part`, 'build'), { recursive: true });
+  await writeFile(join(build, `v1.9.4-${SYSTEM}.part`, 'build', 'whisper'), 'half');
+  await writeFile(join(build, `v1.9.4-${SYSTEM}.zip.part`), 'half');
+  await mkdir(models, { recursive: true });
+  await writeFile(join(models, 'ggml-small.bin.part'), 'half');
+  await writeFile(join(models, 'ggml-tiny.bin'), 'kept');
+  const { env } = await served(t);
+
+  const plugin = await startedAndShaken(t, { directory, env });
+  await downloads(plugin);
+
+  assert.deepEqual(await filesIn(plugin.directory), [
+    'downloads',
+    'downloads/models',
+    'downloads/models/ggml-tiny.bin',
+    'downloads/whisper.cpp',
+    'scribe.db',
+  ]);
+});
+
+test(
+  'fetching the same release again replaces the build, and leaves nothing beside it',
+  async (t) => {
+    const { env } = await served(t);
+    const plugin = await startedAndShaken(t, { env });
+    await plugin.call('fetch_whisper');
+    await settled(plugin);
+    const first = await filesIn(plugin.directory);
+    const kept = join(plugin.directory, 'downloads', 'whisper.cpp', `v1.9.4-${SYSTEM}`);
+    await writeFile(join(kept, 'old'), '');
 
     await plugin.call('fetch_whisper');
     const seen = await settled(plugin);
 
-    assert.match(seen.whisper.fetch?.failed ?? '', /could not be unpacked: .*(outside|names no file)/);
-    assert.deepEqual(await filesIn(plugin.directory), ['scribe.db']);
-  });
-}
+    assert.equal(seen.whisper.fetch, null, seen.whisper.fetch?.failed ?? '');
+    assert.deepEqual(await filesIn(plugin.directory), first);
+    assert.equal((await settings(plugin)).whisper.problem, null);
+  },
+);
 
-test('where whisper.cpp publishes no build, the Page is told how to get one, and a path is taken', async (t) => {
-  const { server, env } = await served(t, { build: false });
-  const plugin = await startedAndShaken(t, { env });
+test(
+  'a build whose setting cannot be saved is taken away, and the build in use stays',
+  async (t) => {
+    const { env } = await served(t);
+    const plugin = await startedAndShaken(t, { env });
+    await plugin.call('fetch_whisper');
+    await settled(plugin);
+    const before = await settings(plugin);
+    // A file of the build in use, which a new build of the same release would not hold.
+    const kept = join(plugin.directory, 'downloads', 'whisper.cpp', `v1.9.4-${SYSTEM}`);
+    await writeFile(join(kept, 'in-use'), '');
+    const first = await filesIn(plugin.directory);
+    // A directory where the settings file is written first: no save can succeed.
+    await mkdir(join(plugin.directory, 'settings.json.next'));
 
-  const seen = await downloads(plugin);
-  const refused = refusal(await plugin.call('fetch_whisper'));
-  const saved = await plugin.call('update_settings', { whisper: join(plugin.directory, 'whisper-cli') });
+    await plugin.call('fetch_whisper');
+    const seen = await settled(plugin);
 
-  assert.equal(seen.whisper.build, null);
-  assert.match(seen.whisper.missing ?? '', /publishes no build for .*https:\/\/github\.com\/ggml-org\/whisper\.cpp.*absolute path/);
-  assert.equal(refused, seen.whisper.missing);
-  assert.equal(saved.error, undefined);
-  assert.deepEqual(server.asked(), []);
-});
+    assert.match(seen.whisper.fetch?.failed ?? '', /so nothing was kept\.$/);
+    assert.deepEqual(
+      await filesIn(plugin.directory),
+      [...first, 'settings.json.next'].sort(),
+    );
+    assert.ok((await stat(String(before.whisper.value))).isFile());
+    assert.equal((await settings(plugin)).whisper.problem, null);
+  },
+);

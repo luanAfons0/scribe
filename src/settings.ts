@@ -7,7 +7,8 @@
  * kept in `settings.json` in the Plugin directory, so they work however the
  * Host was started. The variable of the same name still beats the file, and
  * the file beats the default, which is none. A variable that is set but empty
- * is not set: it decides nothing.
+ * is not set: it decides nothing. One that is not in its form decides nothing
+ * either, and the settings tools say it is ignored (ADR-0004).
  *
  * None of the four ends the Plugin Server, and neither does a settings file
  * that cannot be read (ADR-0004): a Plugin Server that is up keeps its Plugin
@@ -23,7 +24,14 @@
  */
 import { accessSync, constants, statSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
-import { COMMAND_FORM, commandFrom, commandOf, findProgram, type Command } from './command.ts';
+import {
+  COMMAND_FORM,
+  COMMAND_SHAPE,
+  commandOf,
+  findProgram,
+  toArray,
+  type Command,
+} from './command.ts';
 import { badInput, sentenceFor } from './mcp.ts';
 import { pathOf, readSettingsFile, writeSettingsFile } from './settings-file.ts';
 
@@ -107,6 +115,8 @@ export type SettingView = {
   readonly variable: string;
   /** What is missing or wrong with it, as one sentence, or null when nothing is. */
   readonly problem: string | null;
+  /** Why its variable is set and ignored, and to remove it, as one sentence, or null. */
+  readonly ignored: string | null;
 };
 
 /** Every setting the operator chooses, as the settings tools tell them. */
@@ -131,35 +141,138 @@ export type Choices = {
   update(given: Readonly<Record<string, unknown>>): void;
 };
 
-/** What each setting is called on the Page, and the variable that beats it. */
-const NAMES: { readonly [name in Chosen]: { readonly label: string; readonly variable: string } } =
-  {
-    whisper: { label: 'the whisper.cpp executable', variable: WHISPER_VARIABLE },
-    whisperModel: { label: 'the whisper.cpp model', variable: MODEL_VARIABLE },
-    minutesCommand: { label: 'the Minutes command', variable: MINUTES_VARIABLE },
-    worklogPlugin: { label: 'the Worklog Plugin', variable: WORKLOG_VARIABLE },
-  };
+/** A setting's value in its form: a path or a name, or a command as its JSON array. */
+type Value = string | readonly string[];
+
+/** One setting as the file or the environment gave it, before it is checked against the disk. */
+type Given = {
+  readonly value: Value | null;
+  readonly from: DecidedBy;
+  /** Why the file's value could not be read at all: a file or a value not in its form. */
+  readonly unread: string | null;
+};
+
+/** One setting the operator chooses, as data: everything the code below reads of it. */
+type Spec = {
+  /** The variable that beats the file. */
+  readonly variable: string;
+  /** What a sentence calls it. */
+  readonly label: string;
+  /** Its form, as a sentence says it after "set it to". */
+  readonly shape: string;
+  /** Whether its variable holds JSON, as the Minutes command does, or plain text. */
+  readonly json: boolean;
+  /** The value in its form, or null when it is not in it. */
+  readonly form: (value: unknown) => Value | null;
+  /** What it needs to be used, read each time, which throws the sentence when it is not met. */
+  readonly check: ((spec: Spec, setting: Given) => unknown) | null;
+};
 
 /** A FirstMate Registry name, as the Host takes it. */
 const PLUGIN_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-/** One setting as the file or the environment gave it, before it is checked against the disk. */
-type Given = {
-  readonly value: string | readonly string[] | null;
-  readonly from: DecidedBy;
-  /** Why it could not be read at all: a variable or a file not in its form. */
-  readonly unread: string | null;
+/**
+ * The four settings, as data. The form is all `update_settings` checks
+ * (ADR-0004): an absolute path for whisper.cpp and its model, a program and its
+ * arguments for the Minutes command (ADR-0003), a Registry name for the
+ * Worklog Plugin. Whether a path leads to a file is the check, read each time
+ * and shown beside the setting as its problem.
+ */
+const SPECS: { readonly [name in Chosen]: Spec } = {
+  whisper: {
+    variable: WHISPER_VARIABLE,
+    label: 'the whisper.cpp executable',
+    shape: 'the absolute path of the whisper.cpp executable',
+    json: false,
+    form: absolutePath,
+    check: executable,
+  },
+  whisperModel: {
+    variable: MODEL_VARIABLE,
+    label: 'the whisper.cpp model',
+    shape: 'the absolute path of the whisper.cpp model',
+    json: false,
+    form: absolutePath,
+    check: existingFile,
+  },
+  minutesCommand: {
+    variable: MINUTES_VARIABLE,
+    label: 'the Minutes command',
+    shape: COMMAND_SHAPE,
+    json: true,
+    form: (value) => {
+      const command = commandOf(value);
+      return command === null ? null : toArray(command);
+    },
+    check: foundCommand,
+  },
+  worklogPlugin: {
+    variable: WORKLOG_VARIABLE,
+    label: 'the Worklog Plugin',
+    shape: 'the Registry name of the Worklog Plugin, such as "worklog"',
+    json: false,
+    form: (value) => (typeof value === 'string' && PLUGIN_NAME.test(value) ? value : null),
+    check: null,
+  },
 };
+
+/** One thing for each setting, made by name. */
+function each<T>(make: (name: Chosen) => T): { readonly [name in Chosen]: T } {
+  return {
+    whisper: make('whisper'),
+    whisperModel: make('whisperModel'),
+    minutesCommand: make('minutesCommand'),
+    worklogPlugin: make('worklogPlugin'),
+  };
+}
+
+/** What a variable gives a setting: its value, or why it is ignored. */
+type FromVariable = { readonly value: Value | null; readonly ignored: string | null };
+
+/**
+ * A setting's variable, read once. One that is set and not in its form, such
+ * as the shell line a 1.x systemd drop-in still sets, does not decide: the
+ * file decides, then the default, and the sentence says to remove it
+ * (ADR-0004).
+ */
+function fromVariable(spec: Spec, env: NodeJS.ProcessEnv): FromVariable {
+  const text = (env[spec.variable] ?? '').trim();
+  if (text === '') return { value: null, ignored: null };
+  const value = spec.form(spec.json ? jsonOrText(text) : text);
+  if (value !== null) return { value, ignored: null };
+  return {
+    value: null,
+    ignored:
+      `${spec.variable} is ${text}, which is not ${spec.shape}, so scribe ignores it; ` +
+      'remove it from where the Host is started, such as the systemd drop-in of scribe 1.x, ' +
+      `and set ${spec.label} on the Plugin Page.`,
+  };
+}
+
+/** Text read as JSON, or the text itself when it is not JSON. */
+function jsonOrText(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+/** The sentence that says a value is not in its setting's form. */
+function notInForm(spec: Spec, named: string, value: unknown): string {
+  return `${named} is ${JSON.stringify(value)}; set it to ${spec.shape}, or to null for none.`;
+}
 
 /**
  * The settings the operator chooses, from the environment and the settings
- * file in the Plugin directory. The file is read once, here; this Plugin
- * Server is the one that writes it.
+ * file in the Plugin directory. Both are read once, here; this Plugin Server
+ * is the one that writes the file.
  */
 export function openChoices(
   env: NodeJS.ProcessEnv = process.env,
   directory = '.',
 ): Choices {
+  const environment = each((name) => fromVariable(SPECS[name], env));
   let whole: Record<string, unknown> = {};
   let broken: string | null = null;
   try {
@@ -173,40 +286,24 @@ export function openChoices(
     if (broken !== null) return { value: null, unread: broken };
     const held = whole[name];
     if (held === undefined || held === null) return { value: null, unread: null };
-    try {
-      return { value: formOf(name, held), unread: null };
-    } catch (fault) {
-      return {
-        value: null,
-        unread: `In ${pathOf(directory)}, ${sentenceFor(fault)}`,
-      };
-    }
+    const value = SPECS[name].form(held);
+    if (value !== null) return { value, unread: null };
+    const unread = `In ${pathOf(directory)}, ${notInForm(SPECS[name], name, held)}`;
+    return { value: null, unread };
   };
 
   const given = (name: Chosen): Given => {
-    const text = (env[NAMES[name].variable] ?? '').trim();
-    if (text !== '') {
-      if (name !== 'minutesCommand') return { value: text, from: 'environment', unread: null };
-      try {
-        const command = commandFrom(text, MINUTES_VARIABLE);
-        return { value: [command.program, ...command.args], from: 'environment', unread: null };
-      } catch (fault) {
-        return { value: null, from: 'environment', unread: sentenceFor(fault) };
-      }
-    }
+    const variable = environment[name].value;
+    if (variable !== null) return { value: variable, from: 'environment', unread: null };
     const held = saved(name);
     if (held.unread !== null) return { value: null, from: 'file', unread: held.unread };
-    return held.value === null
-      ? { value: null, from: 'default', unread: null }
-      : { value: held.value, from: 'file', unread: null };
+    return { ...held, from: held.value === null ? 'default' : 'file' };
   };
 
   const problemOf = (name: Chosen): string | null => {
-    const setting = given(name);
+    const spec = SPECS[name];
     try {
-      if (name === 'whisper') executable(name, setting);
-      else if (name === 'whisperModel') file(name, setting);
-      else if (name === 'minutesCommand') foundCommand(setting);
+      spec.check?.(spec, given(name));
       return null;
     } catch (fault) {
       return sentenceFor(fault);
@@ -215,11 +312,11 @@ export function openChoices(
 
   return {
     whisper: () => ({
-      program: executable('whisper', given('whisper')),
-      model: file('whisperModel', given('whisperModel')),
+      program: executable(SPECS.whisper, given('whisper')),
+      model: existingFile(SPECS.whisperModel, given('whisperModel')),
     }),
 
-    minutesCommand: () => foundCommand(given('minutesCommand')),
+    minutesCommand: () => foundCommand(SPECS.minutesCommand, given('minutesCommand')),
 
     minutesCommandSet: () => {
       const setting = given('minutesCommand');
@@ -231,24 +328,18 @@ export function openChoices(
       return typeof setting.value === 'string' ? setting.value : null;
     },
 
-    view: () => {
-      const one = (name: Chosen): SettingView => {
+    view: () =>
+      each((name) => {
         const setting = given(name);
         return {
           value: setting.value,
           from: setting.from,
           saved: saved(name).value,
-          variable: NAMES[name].variable,
+          variable: SPECS[name].variable,
           problem: problemOf(name),
+          ignored: environment[name].ignored,
         };
-      };
-      return {
-        whisper: one('whisper'),
-        whisperModel: one('whisperModel'),
-        minutesCommand: one('minutesCommand'),
-        worklogPlugin: one('worklogPlugin'),
-      };
-    },
+      }),
 
     update: (changes) => {
       const known: readonly string[] = CHOSEN;
@@ -264,11 +355,12 @@ export function openChoices(
       for (const name of CHOSEN) {
         if (!(name in changes)) continue;
         const value = changes[name];
-        try {
-          next[name] = value === null ? null : formOf(name, value);
-        } catch (fault) {
-          throw badInput(`update_settings: ${sentenceFor(fault)}`);
+        const spec = SPECS[name];
+        const formed = value === null ? null : spec.form(value);
+        if (value !== null && formed === null) {
+          throw badInput(`update_settings: ${notInForm(spec, name, value)}`);
         }
+        next[name] = formed;
       }
       // A broken file is replaced by what was saved, which is how the Page fixes it.
       writeSettingsFile(next, directory);
@@ -278,55 +370,32 @@ export function openChoices(
   };
 }
 
-/**
- * A setting in its form, or a sentence that says the form: an absolute path
- * for whisper.cpp and its model, a program and its arguments for the Minutes
- * command (ADR-0003), a Registry name for the Worklog Plugin. Whether the path
- * leads to a file is not the form: that is a problem, shown beside it.
- */
-function formOf(name: Chosen, value: unknown): string | readonly string[] {
-  const shown = JSON.stringify(value);
-  if (name === 'minutesCommand') {
-    const command = commandOf(value, name, shown);
-    return [command.program, ...command.args];
-  }
-  if (name === 'worklogPlugin') {
-    if (typeof value === 'string' && PLUGIN_NAME.test(value)) return value;
-    throw new Error(
-      `${name} is ${shown}; set it to the Registry name of the Worklog Plugin, such as ` +
-        '"worklog", or to null for none.',
-    );
-  }
-  if (typeof value === 'string' && value.trim() !== '' && isAbsolute(value.trim())) {
-    return value.trim();
-  }
-  throw new Error(
-    `${name} is ${shown}; set it to the absolute path of ${NAMES[name].label}, or to null ` +
-      'for none.',
-  );
+/** An absolute path, trimmed, or null when the value is not one. */
+function absolutePath(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const path = value.trim();
+  return path !== '' && isAbsolute(path) ? path : null;
 }
 
 /** Where a setting is fixed: where the Host is started, or on the Plugin Page. */
-function whereTo(name: Chosen, setting: Given): string {
+function whereTo(spec: Spec, setting: Given): string {
   return setting.from === 'environment'
-    ? `change ${NAMES[name].variable} where the Host is started`
+    ? `change ${spec.variable} where the Host is started`
     : 'set it on the Plugin Page';
 }
 
 /** How a sentence names a setting: by its variable when the environment decides it. */
-function named(name: Chosen, setting: Given): string {
-  return setting.from === 'environment'
-    ? `${NAMES[name].label} in ${NAMES[name].variable}`
-    : NAMES[name].label;
+function named(spec: Spec, setting: Given): string {
+  return setting.from === 'environment' ? `${spec.label} in ${spec.variable}` : spec.label;
 }
 
 /** The path of an existing file a setting names, or a sentence that says no Call can record. */
-function file(name: 'whisper' | 'whisperModel', setting: Given): string {
+function existingFile(spec: Spec, setting: Given): string {
   if (setting.unread !== null) throw badInput(`No Call can record: ${setting.unread}`);
   if (typeof setting.value !== 'string') {
     throw badInput(
-      `No Call can record until ${NAMES[name].label} is set, on the Plugin Page or with ` +
-        `${NAMES[name].variable} where the Host is started.`,
+      `No Call can record until ${spec.label} is set, on the Plugin Page or with ` +
+        `${spec.variable} where the Host is started.`,
     );
   }
   const path = setting.value;
@@ -335,27 +404,28 @@ function file(name: 'whisper' | 'whisperModel', setting: Given): string {
     found = statSync(path);
   } catch {
     throw badInput(
-      `No Call can record: ${named(name, setting)} is ${path}, and there is no file there; ` +
-        `${whereTo(name, setting)}.`,
+      `No Call can record: ${named(spec, setting)} is ${path}, and there is no file there; ` +
+        `${whereTo(spec, setting)}.`,
     );
   }
   if (!found.isFile()) {
     throw badInput(
-      `No Call can record: ${named(name, setting)} is ${path}, which is not a file; ` +
-        `${whereTo(name, setting)}.`,
+      `No Call can record: ${named(spec, setting)} is ${path}, which is not a file; ` +
+        `${whereTo(spec, setting)}.`,
     );
   }
   return path;
 }
 
-function executable(name: 'whisper', setting: Given): string {
-  const path = file(name, setting);
+/** The path of an existing file a setting names, which may be run. */
+function executable(spec: Spec, setting: Given): string {
+  const path = existingFile(spec, setting);
   try {
     accessSync(path, constants.X_OK);
   } catch {
     throw badInput(
-      `No Call can record: ${named(name, setting)} is ${path}, which may not be run; ` +
-        `${whereTo(name, setting)}.`,
+      `No Call can record: ${named(spec, setting)} is ${path}, which may not be run; ` +
+        `${whereTo(spec, setting)}.`,
     );
   }
   return path;
@@ -365,25 +435,25 @@ function executable(name: 'whisper', setting: Given): string {
  * The Minutes command, with its program as the path it is run by, or a
  * sentence that says why Make Minutes is refused.
  */
-function foundCommand(setting: Given): Command {
+function foundCommand(spec: Spec, setting: Given): Command {
   if (setting.unread !== null) throw badInput(setting.unread);
-  if (!Array.isArray(setting.value)) {
+  const command = commandOf(setting.value);
+  if (command === null) {
     throw badInput(
       'Make Minutes needs a Minutes command: set it on the Plugin Page, or with ' +
-        `${MINUTES_VARIABLE} where the Host is started, to a command that reads a prompt on ` +
+        `${spec.variable} where the Host is started, to a command that reads a prompt on ` +
         `stdin and prints the Minutes, such as ${COMMAND_FORM}. Recording and the ` +
         'Transcript work without it.',
     );
   }
-  const [program, ...args] = setting.value as readonly string[];
-  const path = findProgram(program!);
+  const path = findProgram(command.program);
   if (path === null) {
     throw badInput(
-      `${named('minutesCommand', setting)} names "${program}", which is not found on the ` +
-        `Host's PATH; give its absolute path, and ${whereTo('minutesCommand', setting)}.`,
+      `${named(spec, setting)} names "${command.program}", which is not found on the ` +
+        `Host's PATH; give its absolute path, and ${whereTo(spec, setting)}.`,
     );
   }
-  return { program: path, args };
+  return { program: path, args: command.args };
 }
 
 function milliseconds(variable: string, value: string | undefined, fallback: number): number {

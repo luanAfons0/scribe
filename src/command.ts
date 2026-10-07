@@ -25,36 +25,24 @@ export type Command = {
 /** The form, as an example a sentence can show the operator. */
 export const COMMAND_FORM = '["ollama","run","<model>"]';
 
-/** A command read from its JSON text, or a sentence that names the setting and the form. */
-export function commandFrom(text: string, setting: string): Command {
-  let value: unknown;
-  try {
-    value = JSON.parse(text);
-  } catch {
-    throw new Error(formSentence(setting, text));
-  }
-  return commandOf(value, setting, text);
+/** The form, as a sentence can describe it to the operator. */
+export const COMMAND_SHAPE =
+  'a JSON array of strings, the program first and then each argument, such as ' +
+  COMMAND_FORM;
+
+/** A command from a value read as JSON, or null when it is not an array of strings. */
+export function commandOf(value: unknown): Command | null {
+  if (!Array.isArray(value)) return null;
+  const parts: readonly unknown[] = value;
+  if (!parts.every((part): part is string => typeof part === 'string')) return null;
+  const [program, ...args] = parts;
+  if (program === undefined || program.trim() === '') return null;
+  return { program, args };
 }
 
-/** A command from a value already read as JSON, or a sentence that says the form. */
-export function commandOf(value: unknown, setting: string, shown = JSON.stringify(value)): Command {
-  if (
-    !Array.isArray(value) ||
-    value.length === 0 ||
-    !value.every((part): part is string => typeof part === 'string') ||
-    value[0]!.trim() === ''
-  ) {
-    throw new Error(formSentence(setting, shown));
-  }
-  const [program, ...args] = value as string[];
-  return { program: program!, args };
-}
-
-function formSentence(setting: string, shown: string): string {
-  return (
-    `${setting} is ${shown}; write it as a JSON array of strings, the program first and ` +
-    `then each argument, such as ${COMMAND_FORM}.`
-  );
+/** A command as the JSON array it is written as: the program, then each argument. */
+export function toArray(command: Command): readonly string[] {
+  return [command.program, ...command.args];
 }
 
 /**

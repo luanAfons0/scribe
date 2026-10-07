@@ -39,7 +39,10 @@ when you press its button: nothing is fetched at `firstmate install`.
 
 The Page shows how far a download got. A download that fails, or whose SHA-256
 is not the one scribe knows, is said in one sentence under its button, and
-nothing of it is kept. The SHA-256 of every build and model is pinned in
+nothing of it is kept. Fetching whisper.cpp again replaces the build in use
+only once the new one is in place, and a download cut short by a stop is
+cleared at the next start. Once whisper.cpp is set and runs, the Page offers
+no other build. The SHA-256 of every build and model is pinned in
 `src/downloads.json` (ADR-0005).
 
 The Linux builds are the ones whisper.cpp makes on Ubuntu: they need glibc
@@ -105,6 +108,15 @@ next window and the next Minutes on, with no restart.
 Each setting has a variable of the same meaning, which beats what is saved on
 the Page. When one is set, the Settings view says that the variable decides
 it. A variable set to nothing decides nothing.
+
+A variable that is not in its form, such as a Minutes command that is not a
+JSON array, or a path that is not absolute, decides nothing either: scribe
+ignores it, so what is saved on the Page decides, then the default. The
+Settings view says, beside the setting, that the variable is ignored and
+should be removed from where the Host is started.
+
+Coming from scribe 1.x? Remove the `SCRIBE_MINUTES_COMMAND` line from the
+Host's systemd drop-in, and set the Minutes command on the Page instead.
 
 | Variable                 | What it is                                              |
 | ------------------------ | ------------------------------------------------------- |
@@ -217,10 +229,12 @@ A program that is not found is shown beside the setting.
 
 With no command set, recording and the Transcript still work. Only Make Minutes
 is refused, with a sentence that says to set the Minutes command. So is a
-command that is not a JSON array of strings, or whose program is not found. A
+command whose program is not found. A
 command that fails leaves the Minutes failed, with the last line it said on
 stderr. A command that runs longer than `SCRIBE_MINUTES_TIMEOUT_MS` is ended
-with every process it started, and its Minutes are failed.
+with every process it started, and its Minutes are failed. When the Plugin
+Server stops, every Minutes command and whisper.cpp it started is ended the
+same way.
 
 ### An Entry in Worklog
 

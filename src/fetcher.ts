@@ -10,13 +10,20 @@
  * file: so nothing else has to be set, and nothing from a failed download is
  * left behind.
  *
+ * What is there already, the build of the same release fetched before, is set
+ * aside and removed only once the new one is in place and its setting saved.
+ * A rename or a save that fails puts it back, so the build in use is never
+ * lost. A Plugin Server that stops halfway leaves `.part` files, which the
+ * next start removes, and a build set aside, which it puts back or removes.
+ *
  * A download runs while the tools answer: the tool that starts it answers at
  * once, and `get_downloads` says how far it got, or the one sentence it
  * failed with.
  */
 import { createHash } from 'node:crypto';
+import { existsSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { chmod, mkdir, open, rename, readFile, rm, rmdir, stat } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { thisSystem, type Download, type Downloads } from './downloads.ts';
 import { badInput, sentenceFor } from './mcp.ts';
 import type { Choices, Settings } from './settings.ts';
@@ -25,16 +32,25 @@ import { unpack } from './unpack.ts';
 /** The directory, inside the Plugin directory, that holds what scribe fetched. */
 export const DOWNLOADS_DIRECTORY = 'downloads';
 
-/** One download in flight, or the one that failed last. */
+/** The end of the name of what a download writes before it is in place. */
+const PART = '.part';
+
+/** The end of the name of what was in place, set aside while a new one takes its place. */
+const ASIDE = '.old';
+
+/**
+ * One download in flight, or the one that failed last. The fetcher changes it
+ * in place as bytes come; the view gets a copy.
+ */
 export type FetchView = {
   /** What is fetched: whisper.cpp and its release, or the model's file name. */
   readonly name: string;
   /** How many bytes have come so far. */
-  readonly received: number;
+  received: number;
   /** How many bytes it is. */
   readonly size: number;
   /** The one sentence it failed with, or null while it is in flight. */
-  readonly failed: string | null;
+  failed: string | null;
 };
 
 /** What `get_downloads` answers. */
@@ -51,6 +67,8 @@ export type DownloadsView = {
   readonly models: {
     /** The models offered, each with its size in bytes. */
     readonly offered: readonly { readonly name: string; readonly size: number }[];
+    /** The model the Page offers first, or null for the first one. */
+    readonly default: string | null;
     readonly fetch: FetchView | null;
   };
 };
@@ -65,8 +83,27 @@ export type Fetcher = {
   fetchModel(name: unknown): void;
 };
 
-/** One download as it goes: what the view shows, changed in place as bytes come. */
-type Progress = { name: string; received: number; size: number; failed: string | null };
+/** The two downloads that may run at once: one of whisper.cpp, one of a model. */
+type Slot = 'whisper' | 'model';
+
+/** One download, as `startDownload` runs it. */
+type Job = {
+  /** What is fetched, as the view and every sentence name it. */
+  readonly name: string;
+  /** Where it comes from, how big it is, and its SHA-256. */
+  readonly source: Download;
+  /** Where it stays once it is in place: a file or a directory. */
+  readonly kept: string;
+  /** The file the bytes are written into as they come. */
+  readonly into: string;
+  /** The setting that names what was fetched. */
+  readonly setting: 'whisper' | 'whisperModel';
+  /**
+   * Make what is kept, at `part`, out of the checked bytes in `into`, and
+   * hand back the path the setting names once `part` is at `kept`.
+   */
+  readonly make: (part: string) => Promise<string>;
+};
 
 /** The Fetcher over this list of downloads, keeping what it fetches in `directory`. */
 export function fetcherFor(
@@ -78,22 +115,45 @@ export function fetcherFor(
   const build = list.whisper.builds[thisSystem()] ?? null;
   const release = list.whisper.release;
   const top = resolve(directory, DOWNLOADS_DIRECTORY);
-  let whisper: Progress | null = null;
-  let model: Progress | null = null;
+  const fetches: Record<Slot, FetchView | null> = { whisper: null, model: null };
+  clearInterrupted(top);
 
-  const running = (progress: Progress | null): boolean =>
-    progress !== null && progress.failed === null;
-
-  /** Run one download to its end: null when it is kept, its sentence when it failed. */
-  const run = (progress: Progress, work: () => Promise<void>, cleanUp: () => Promise<void>) =>
-    work().then(
-      () => null,
+  /** Start one download, and answer at once; it ends kept and set, or failed with a sentence. */
+  const startDownload = (slot: Slot, job: Job): void => {
+    const current = fetches[slot];
+    if (current !== null && current.failed === null) {
+      throw badInput(
+        `${current.name} is being fetched already; get_downloads says how far it got.`,
+      );
+    }
+    const progress: FetchView = {
+      name: job.name,
+      received: 0,
+      size: job.source.size,
+      failed: null,
+    };
+    fetches[slot] = progress;
+    const part = `${job.kept}${PART}`;
+    const home = dirname(job.kept);
+    const fetchAndKeep = async (): Promise<void> => {
+      await mkdir(home, { recursive: true });
+      await rm(part, { recursive: true, force: true });
+      await downloadAndVerify(job.source, job.into, progress, settings.fetchIdleMs);
+      const named = await job.make(part);
+      await putInPlace(part, job.kept, () => choices.update({ [job.setting]: named }));
+    };
+    void fetchAndKeep().then(
+      () => {
+        if (fetches[slot] === progress) fetches[slot] = null;
+      },
       async (fault: unknown) => {
-        await cleanUp().catch(() => undefined);
+        await rm(job.into, { force: true }).catch(() => undefined);
+        await rm(part, { recursive: true, force: true }).catch(() => undefined);
+        await removeIfEmpty(home, top);
         progress.failed = `${sentenceFor(fault).replace(/\.$/, '')}, so nothing was kept.`;
-        return progress.failed;
       },
     );
+  };
 
   return {
     view: () => ({
@@ -101,62 +161,45 @@ export function fetcherFor(
         release,
         build: build === null ? null : { size: build.size },
         missing: build === null ? noBuild(release) : null,
-        fetch: whisper === null ? null : { ...whisper },
+        fetch: fetches.whisper === null ? null : { ...fetches.whisper },
       },
       models: {
         offered: list.models.map((offered) => ({ name: offered.name, size: offered.size })),
-        fetch: model === null ? null : { ...model },
+        default: list.defaultModel,
+        fetch: fetches.model === null ? null : { ...fetches.model },
       },
     }),
 
     fetchWhisper: () => {
       if (build === null) throw badInput(noBuild(release));
-      if (running(whisper)) {
-        throw badInput('whisper.cpp is being fetched already; get_downloads says how far it got.');
-      }
-      const progress: Progress = {
-        name: `whisper.cpp ${release}`,
-        received: 0,
-        size: build.size,
-        failed: null,
-      };
-      whisper = progress;
-      const home = join(top, 'whisper.cpp');
-      const kept = join(home, `${release}-${thisSystem()}`);
-      const part = `${kept}.part`;
-      const archive = `${kept}.${build.format}.part`;
-      void run(
-        progress,
-        async () => {
-          await mkdir(home, { recursive: true });
-          await rm(part, { recursive: true, force: true });
-          await fetchChecked(build, archive, progress, settings.fetchIdleMs);
-          const bytes = await readFile(archive);
-          await rm(archive, { force: true });
+      const name = `whisper.cpp ${release}`;
+      const kept = join(top, 'whisper.cpp', `${release}-${thisSystem()}`);
+      const into = `${kept}.${build.format}${PART}`;
+      startDownload('whisper', {
+        name,
+        source: build,
+        kept,
+        into,
+        setting: 'whisper',
+        make: async (part) => {
+          const bytes = await readFile(into);
+          await rm(into, { force: true });
           await mkdir(part);
           try {
             unpack(bytes, build.format, part);
           } catch (fault) {
             throw new Error(
-              `${progress.name} from ${build.url} could not be unpacked: ${sentenceFor(fault)}`,
+              `${name} from ${build.url} could not be unpacked: ${sentenceFor(fault)}`,
             );
           }
-          const program = join(part, ...build.program.split('/'));
+          const inside = build.program.split('/');
+          const program = join(part, ...inside);
           if (!(await stat(program).catch(() => null))?.isFile()) {
-            throw new Error(`${progress.name} from ${build.url} holds no ${build.program}.`);
+            throw new Error(`${name} from ${build.url} holds no ${build.program}.`);
           }
           await chmod(program, 0o755);
-          await rm(kept, { recursive: true, force: true });
-          await rename(part, kept);
-          choices.update({ whisper: join(kept, ...build.program.split('/')) });
+          return join(kept, ...inside);
         },
-        async () => {
-          await rm(archive, { force: true });
-          await rm(part, { recursive: true, force: true });
-          await emptied(home, top);
-        },
-      ).then((failed) => {
-        if (failed === null && whisper === progress) whisper = null;
       });
     },
 
@@ -168,35 +211,15 @@ export function fetcherFor(
             `and was given ${JSON.stringify(name)}.`,
         );
       }
-      if (running(model)) {
-        throw badInput(
-          `${model!.name} is being fetched already; get_downloads says how far it got.`,
-        );
-      }
-      const progress: Progress = {
+      const kept = join(top, 'models', chosen.name);
+      // A model is one file, written where it is made: it is in place once renamed.
+      startDownload('model', {
         name: chosen.name,
-        received: 0,
-        size: chosen.size,
-        failed: null,
-      };
-      model = progress;
-      const home = join(top, 'models');
-      const kept = join(home, chosen.name);
-      const part = `${kept}.part`;
-      void run(
-        progress,
-        async () => {
-          await mkdir(home, { recursive: true });
-          await fetchChecked(chosen, part, progress, settings.fetchIdleMs);
-          await rename(part, kept);
-          choices.update({ whisperModel: kept });
-        },
-        async () => {
-          await rm(part, { force: true });
-          await emptied(home, top);
-        },
-      ).then((failed) => {
-        if (failed === null && model === progress) model = null;
+        source: chosen,
+        kept,
+        into: `${kept}${PART}`,
+        setting: 'whisperModel',
+        make: async () => kept,
       });
     },
   };
@@ -212,14 +235,80 @@ function noBuild(release: string): string {
 }
 
 /**
- * Fetch one file into `part`, working out its SHA-256 as it comes, and throw
- * a sentence when it cannot be fetched, goes quiet for `idleMs`, or is not the
- * file the list names. Its bytes are never kept for any other use.
+ * Put what was made at `part` where it stays, at `kept`, and save the setting
+ * that names it. What was at `kept` is set aside first and removed only at the
+ * end, so a rename or a save that fails puts it back: the build in use is
+ * never lost, and nothing new is left.
  */
-async function fetchChecked(
+async function putInPlace(part: string, kept: string, save: () => void): Promise<void> {
+  const aside = `${kept}${ASIDE}`;
+  await rm(aside, { recursive: true, force: true });
+  const had = await stat(kept).then(
+    () => true,
+    () => false,
+  );
+  if (had) await rename(kept, aside);
+  try {
+    await rename(part, kept);
+  } catch (fault) {
+    if (had) await rename(aside, kept);
+    throw fault;
+  }
+  try {
+    save();
+  } catch (fault) {
+    await rm(kept, { recursive: true, force: true });
+    if (had) await rename(aside, kept);
+    throw fault;
+  }
+  await rm(aside, { recursive: true, force: true });
+}
+
+/**
+ * Take away what a Plugin Server that stopped mid-download left under
+ * `downloads/`: every `.part` file and directory. What was set aside is put
+ * back when nothing took its place, and removed when something did. It runs
+ * once, at start, before any download can.
+ */
+function clearInterrupted(top: string): void {
+  try {
+    clearEach(top);
+  } catch (fault) {
+    process.stderr.write(
+      `scribe: what a stopped download left in ${top} could not all be removed: ` +
+        `${sentenceFor(fault)}\n`,
+    );
+  }
+}
+
+function clearEach(top: string): void {
+  for (const home of entriesOf(top)) {
+    if (!statSync(home).isDirectory()) continue;
+    for (const path of entriesOf(home)) {
+      if (path.endsWith(PART)) rmSync(path, { recursive: true, force: true });
+      if (!path.endsWith(ASIDE)) continue;
+      const kept = path.slice(0, -ASIDE.length);
+      if (existsSync(kept)) rmSync(path, { recursive: true, force: true });
+      else renameSync(path, kept);
+    }
+  }
+}
+
+/** The paths of what a directory holds, or none when it is not there. */
+function entriesOf(directory: string): readonly string[] {
+  if (!existsSync(directory)) return [];
+  return readdirSync(directory).map((name) => join(directory, name));
+}
+
+/**
+ * Download one file into `into`, working out its SHA-256 as it comes, and
+ * throw a sentence when it cannot be fetched, goes quiet for `idleMs`, or is
+ * not the file the list names. Its bytes are never kept for any other use.
+ */
+async function downloadAndVerify(
   source: Download,
-  part: string,
-  progress: Progress,
+  into: string,
+  progress: FetchView,
   idleMs: number,
 ): Promise<void> {
   const failed = (why: string): Error =>
@@ -227,7 +316,7 @@ async function fetchChecked(
   const quiet = new AbortController();
   let timer = setTimeout(() => quiet.abort(), idleMs);
   const hash = createHash('sha256');
-  const out = await open(part, 'w');
+  const out = await open(into, 'w');
   try {
     let answer: Response;
     try {
@@ -266,8 +355,8 @@ function reason(fault: unknown): string {
   return sentenceFor(cause instanceof Error ? cause : fault).replace(/\.$/, '');
 }
 
-/** Take away directories a failed download made, each only when nothing else is in it. */
-async function emptied(...directories: readonly string[]): Promise<void> {
+/** Remove the directories a failed download made, each only when nothing else is in it. */
+async function removeIfEmpty(...directories: readonly string[]): Promise<void> {
   for (const directory of directories) {
     await rmdir(directory).catch(() => undefined);
   }

@@ -123,6 +123,8 @@ export type Started = {
   stop(): void;
   /** Kill the Plugin Server outright, as a crash would. */
   kill(): void;
+  /** Send the Plugin Server a signal, as a service manager stopping it does. */
+  signal(signal: NodeJS.Signals): void;
 };
 
 /**
@@ -307,6 +309,7 @@ export async function startPluginServer(
       ]),
     stop: () => child.stdin!.end(),
     kill: () => child.kill('SIGKILL'),
+    signal: (signal) => child.kill(signal),
   };
 }
 

@@ -10,9 +10,13 @@
  *
  * Every entry must land inside the directory it is unpacked into. A name that
  * is absolute or climbs out with `..` is refused, and so is a link whose
- * target is outside the archive. A link is written as a copy of the file it
- * names, because Windows lets few accounts make one, and whisper.cpp's Linux
- * build names its libraries through links.
+ * target is outside the archive, and a path the archive holds twice. No number
+ * an archive gives is trusted: a size that is not a number, or a length or an
+ * offset that leads past the bytes it holds, is refused, and an entry is never
+ * inflated past the size it declares. The archive's own top directory, `./`,
+ * is no entry to unpack, and is passed over. A link is written as a copy of
+ * the file it names, because Windows lets few accounts make one, and
+ * whisper.cpp's Linux build names its libraries through links.
  */
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, posix } from 'node:path';
@@ -29,7 +33,10 @@ type Entry =
 export function unpack(archive: Buffer, format: Format, into: string): void {
   const entries = format === 'zip' ? readZip(archive) : readTar(gunzipSync(archive));
   const files = new Map<string, Entry>();
-  for (const entry of entries) files.set(entry.path, entry);
+  for (const entry of entries) {
+    if (files.has(entry.path)) throw new Error(`${entry.path} is in the archive twice.`);
+    files.set(entry.path, entry);
+  }
 
   for (const entry of entries) {
     const at = join(into, ...entry.path.split('/'));
@@ -61,9 +68,19 @@ function followed(
   throw new Error(`the link ${link.path} names no file inside the archive.`);
 }
 
+/** A name as a relative path with `/`, before it is checked. */
+function normal(name: string): string {
+  return posix.normalize(name.split('\\').join('/')).replace(/\/+$/, '');
+}
+
+/** Whether a directory entry is the archive's own top, `.` or `./`, which holds the rest. */
+function isTop(name: string): boolean {
+  return normal(name) === '.';
+}
+
 /** A name inside the archive, as a relative path with `/`, or a refusal. */
 function safe(name: string, shown = name): string {
-  const path = posix.normalize(name.split('\\').join('/')).replace(/\/+$/, '');
+  const path = normal(name);
   if (path === '' || path === '.' || path.startsWith('/') || /^[A-Za-z]:/.test(path) ||
     path === '..' || path.startsWith('../')) {
     throw new Error(`${shown} would land outside the directory it is unpacked into.`);
@@ -89,7 +106,9 @@ function readZip(zip: Buffer): readonly Entry[] {
 
   const entries: Entry[] = [];
   for (let n = 0; n < count; n += 1) {
-    if (zip.readUInt32LE(at) !== 0x02014b50) throw new Error('its central directory is broken.');
+    if (at + 46 > zip.length || zip.readUInt32LE(at) !== 0x02014b50) {
+      throw new Error('its central directory is broken.');
+    }
     const flags = zip.readUInt16LE(at + 8);
     const method = zip.readUInt16LE(at + 10);
     const packed = zip.readUInt32LE(at + 20);
@@ -103,18 +122,21 @@ function readZip(zip: Buffer): readonly Entry[] {
     const name = zip.toString('utf8', at + 46, at + 46 + nameLength);
     at += 46 + nameLength + extraLength + commentLength;
 
-    const path = safe(name);
     if (name.endsWith('/') || name.endsWith('\\')) {
-      entries.push({ kind: 'directory', path });
+      if (!isTop(name)) entries.push({ kind: 'directory', path: safe(name) });
       continue;
     }
+    const path = safe(name);
     if ((flags & 1) !== 0) throw new Error(`${name} is encrypted.`);
-    if (zip.readUInt32LE(local) !== 0x04034b50) throw new Error(`${name} has no local header.`);
+    if (local + 30 > zip.length || zip.readUInt32LE(local) !== 0x04034b50) {
+      throw new Error(`${name} has no local header.`);
+    }
     const start = local + 30 + zip.readUInt16LE(local + 26) + zip.readUInt16LE(local + 28);
+    if (start + packed > zip.length) throw new Error(`${name} runs past the end of the archive.`);
     const raw = zip.subarray(start, start + packed);
     let data: Buffer;
     if (method === 0) data = Buffer.from(raw);
-    else if (method === 8) data = inflateRawSync(raw);
+    else if (method === 8) data = inflated(raw, size, name);
     else throw new Error(`${name} is packed by method ${method}, which scribe does not read.`);
     if (data.length !== size) throw new Error(`${name} is not the size its archive says.`);
     // A zip made on Unix keeps the file's mode in the top half of its attributes.
@@ -122,6 +144,23 @@ function readZip(zip: Buffer): readonly Entry[] {
     entries.push({ kind: 'file', path, mode, data });
   }
   return entries;
+}
+
+/**
+ * A deflated entry, inflated to at most the size its archive declares, so an
+ * entry that says it is small cannot fill the memory of the Plugin Server.
+ */
+function inflated(raw: Buffer, size: number, name: string): Buffer {
+  try {
+    // zlib takes no limit below one byte; an empty entry is still checked
+    // against its size after.
+    return inflateRawSync(raw, { maxOutputLength: Math.max(1, size) });
+  } catch (fault) {
+    if ((fault as NodeJS.ErrnoException).code === 'ERR_BUFFER_TOO_LARGE') {
+      throw new Error(`${name} unpacks to more than the ${size} bytes its archive says.`);
+    }
+    throw new Error(`${name} cannot be inflated: ${(fault as Error).message}`);
+  }
 }
 
 /** The entries of a tar, in the ustar and GNU forms, with the long names of both. */
@@ -132,8 +171,11 @@ function readTar(tar: Buffer): readonly Entry[] {
     const zero = field.indexOf(0);
     return field.toString('utf8', 0, zero < 0 ? field.length : zero);
   };
-  const octal = (from: number, length: number): number =>
-    Number.parseInt(text(from, length).trim() || '0', 8);
+  /** An octal field, or NaN when it holds anything but octal digits. */
+  const octal = (from: number, length: number): number => {
+    const digits = text(from, length).trim();
+    return /^[0-7]*$/.test(digits) ? Number.parseInt(digits || '0', 8) : Number.NaN;
+  };
 
   let longName: string | null = null;
   let longLink: string | null = null;
@@ -142,6 +184,13 @@ function readTar(tar: Buffer): readonly Entry[] {
     if (tar.subarray(header, header + 512).every((byte) => byte === 0)) break;
     const type = String.fromCharCode(tar[header + 156] ?? 0);
     const size = octal(header + 124, 12);
+    const named = (): string => longName ?? text(header, 100);
+    if (!Number.isSafeInteger(size)) {
+      throw new Error(`${named()} has a size that is not a number.`);
+    }
+    if (header + 512 + size > tar.length) {
+      throw new Error(`${named()} runs past the end of the archive.`);
+    }
     const data = tar.subarray(header + 512, header + 512 + size);
     next += 512 + Math.ceil(size / 512) * 512;
 
@@ -170,6 +219,7 @@ function readTar(tar: Buffer): readonly Entry[] {
     longName = null;
     longLink = null;
 
+    if (type === '5' && isTop(name)) continue;
     const path = safe(name);
     if (type === '0' || type === '\0' || type === '7') {
       entries.push({ kind: 'file', path, mode: octal(header + 100, 8), data: Buffer.from(data) });
