@@ -25,7 +25,7 @@ import {
 } from './audio.ts';
 import { endCall, recordingCall, startCall, type CallSummary } from './calls.ts';
 import { badInput } from './mcp.ts';
-import type { Settings } from './settings.ts';
+import type { Choices, Settings } from './settings.ts';
 import type { Transcriber } from './transcriber.ts';
 import { within, type Store } from './store.ts';
 
@@ -70,6 +70,7 @@ export function recorderFor(
   store: Store,
   transcriber: Transcriber,
   settings: Pick<Settings, 'cutAfterMs'>,
+  choices: Pick<Choices, 'whisper'>,
   heard: (callId: number) => void,
 ): Recorder {
   let live: Live | null = null;
@@ -114,6 +115,9 @@ export function recorderFor(
 
   return {
     start() {
+      // A Call with no whisper.cpp would keep audio nobody reads, so it is
+      // refused with the sentence that names the setting (ADR-0004).
+      choices.whisper();
       const call = within(store, () => startCall(store));
       live = {
         callId: call.id,

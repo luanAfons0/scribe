@@ -31,8 +31,9 @@ Run every command from the repository root.
 | `node mcp.ts`                        | The Plugin Server, as the Host runs it.       |
 | `./mcp`                              | The same, as the Host runs it in a `wsl` Place. |
 
-The environment variables are in the README's Settings table. Tests set every
-one of them through `tests/helpers/plugin.ts`.
+The settings and the environment variables are in the README's "Set it up".
+Tests set every variable through `tests/helpers/plugin.ts`, and the settings
+file through `update_settings`.
 
 `npm run check` must pass before you call work done.
 
@@ -45,8 +46,9 @@ one of them through `tests/helpers/plugin.ts`.
   the types.
 - **No runtime dependency.** MCP over stdio is the Plugin's own JSON-RPC
   (`src/mcp.ts`); the data is `node:sqlite`.
-- **whisper.cpp** is an executable the operator builds, named by
-  `SCRIBE_WHISPER`. scribe runs it; it does not ship it.
+- **whisper.cpp** is an executable the operator builds, and sets on the
+  Plugin Page. scribe runs it; it does not ship it. Without it scribe runs
+  and refuses to record (ADR-0004).
 - **Windows and Linux**, both, as the FirstMate App runs on both (FirstMate
   ADR-0028). No source file runs a shell: whisper.cpp and the Minutes command
   are a program and its arguments (ADR-0003). CI runs every test on both.
@@ -60,7 +62,11 @@ mcp.ts         the entry point the Host runs with its own Node, on every system.
 mcp            the sh wrapper for a wsl Place: find a Node 24, run src/main.ts.
 src/           the Plugin Server. Every file is one job.
   main.ts      start-up: read the settings, open scribe.db, serve the tools.
-  settings.ts  the environment: whisper.cpp, its model, the Minutes command.
+  settings.ts  the settings the operator chooses, from the environment and
+               settings.json, each with its problem; and the times, from the
+               environment alone (ADR-0004).
+  settings-file.ts settings.json in the Plugin directory: read it, and write
+               it whole through a rename.
   command.ts   a command's form, a JSON array of program and arguments, read
                in one place; and its program, found on the PATH.
   run.ts       run a program with no shell, on Windows and Linux, and end its
@@ -83,6 +89,8 @@ web/           the Plugin Page, as the Host serves it.
   index.html   the Plugin Page, drawn by app.js.
   rpc.js       call(): one tool call over POST rpc.
   app.js       the list of Calls, one Call, and Start and Stop.
+  settings.js  the Settings view: the four settings, who decides each, and
+               what is missing.
   jottings.js  keepJottings(): the box that keeps every change at once.
   markdown.js  the small Markdown renderer for the Minutes, as Worklog's.
   capture.js   startCapture(): the tab and the mic, sent in chunks (ADR-0001).
@@ -95,8 +103,8 @@ docs/adr/      the decisions that are expensive to reverse.
 docs/agents/   how an agent works in this repo. See "Agent skills" below.
 ```
 
-`scribe.db` and `audio/` are this machine's Calls, not the project's. Git
-ignores both.
+`scribe.db`, `settings.json` and `audio/` are this machine's, not the
+project's. Git ignores all three.
 
 ## Code style
 
@@ -126,7 +134,7 @@ ignores both.
   diagnostics on stderr, the exit code, and the files in the directory.
 - **whisper.cpp and the Minutes command are fixture executables** in
   `tests/fixtures/`, reached through `SCRIBE_WHISPER` and
-  `SCRIBE_MINUTES_COMMAND`. Add a fixture rather than a mock, with its
+  `SCRIBE_MINUTES_COMMAND`, or through `update_settings`. Add a fixture rather than a mock, with its
   Windows form, a `.cmd` that hands it to `node`; `fixture(name)` picks the
   one this system runs.
 - The suite runs on Linux and on Windows. A test that only makes sense on one
@@ -135,7 +143,7 @@ ignores both.
   no test drives a browser. Recording needs a human click in Chrome's picker,
   so it is checked by hand.
 - A test name is a sentence about behaviour:
-  `'with SCRIBE_WHISPER not set, it exits with a sentence that names it'`.
+  `'with no whisper.cpp set, recording is refused with a sentence that names the setting'`.
 
 ## Git workflow
 

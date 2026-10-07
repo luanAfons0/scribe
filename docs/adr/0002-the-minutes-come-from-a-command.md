@@ -24,3 +24,10 @@ instead; this decision does not wait for it.
 
 A command installed through nvm is not on the Host's service PATH, so it needs
 its absolute path.
+
+## Amended
+
+The operator now sets the Minutes command in Settings on the Plugin Page, and
+scribe keeps it in `settings.json` in its own directory (ADR-0004).
+`SCRIBE_MINUTES_COMMAND` still beats the file, and the file beats the default,
+which is still no command. Make Minutes with none says to set one in Settings.

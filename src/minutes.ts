@@ -1,6 +1,6 @@
 /**
  * The Minutes of a Call: a prompt made of its Jottings and its Transcript,
- * given to the command in `SCRIBE_MINUTES_COMMAND` on stdin, and the Minutes
+ * given to the Minutes command the operator chose on stdin, and the Minutes
  * read from its stdout (ADR-0002).
  *
  * scribe knows no model. The command is a program and its arguments, run with
@@ -12,10 +12,8 @@
  * fence, is forgiven both; one that writes no Topics still gives Minutes.
  */
 import type { CallView } from './calls.ts';
-import { COMMAND_FORM, commandFrom, findProgram, type Command } from './command.ts';
-import { badInput, sentenceFor } from './mcp.ts';
+import type { Command } from './command.ts';
 import { run } from './run.ts';
-import { MINUTES_VARIABLE } from './settings.ts';
 
 /** The most lines of Topics kept: few enough to read on a Worklog card. */
 const MOST_TOPICS_LINES = 20;
@@ -66,37 +64,6 @@ function stamp(ms: number): string {
   const seconds = Math.floor(ms / 1000);
   const m = String(Math.floor(seconds / 60)).padStart(2, '0');
   return `${m}:${String(seconds % 60).padStart(2, '0')}`;
-}
-
-/**
- * The command, read and found, with its program as the path it is run by;
- * otherwise a sentence that names `SCRIBE_MINUTES_COMMAND` and says what to
- * set it to.
- */
-export function checkCommand(text: string | null, env = process.env): Command {
-  if (text === null) {
-    throw badInput(
-      `make_minutes needs ${MINUTES_VARIABLE}: set it, where the Host is started, to a ` +
-        'command that reads a prompt on stdin and prints the Minutes, written as a JSON ' +
-        `array of strings such as ${COMMAND_FORM}. The README says more. Recording and ` +
-        'the Transcript work without it.',
-    );
-  }
-  let command: Command;
-  try {
-    command = commandFrom(text, MINUTES_VARIABLE);
-  } catch (fault) {
-    throw badInput(sentenceFor(fault));
-  }
-  const program = findProgram(command.program, env);
-  if (program === null) {
-    throw badInput(
-      `${MINUTES_VARIABLE} names "${command.program}", which is not found on the Host's ` +
-        'PATH. Give its absolute path: a command installed through nvm is not on the PATH ' +
-        'of the Host service.',
-    );
-  }
-  return { program, args: command.args };
 }
 
 /** Run the command on this prompt, and read the Minutes it prints. */

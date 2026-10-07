@@ -16,9 +16,10 @@ import { fileURLToPath } from 'node:url';
 const REPOSITORY = dirname(dirname(fileURLToPath(import.meta.url)));
 const WEB = join(REPOSITORY, 'web');
 
-/** Every page in web/, and the script each one runs. */
+/** Every page in web/, and the scripts of its own that reach for its elements. */
 const PAGES = [
   { page: 'index.html', script: 'app.js' },
+  { page: 'index.html', script: 'settings.js' },
 ];
 
 /** Every `href` and `src` the page names, in the order it names them. */
@@ -61,7 +62,7 @@ for (const { page, script } of PAGES) {
     const code = await readFile(join(WEB, script), 'utf8');
     const declared = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((found) => found[1]));
 
-    for (const found of code.matchAll(/byId\('([^']+)'\)/g)) {
+    for (const found of code.matchAll(/(?:byId|getElementById)\('([^']+)'\)/g)) {
       assert.ok(declared.has(found[1]), `${script} reaches for #${found[1]}, which ${page} lacks`);
     }
   });
@@ -101,4 +102,29 @@ test('rpc.js calls the tools over the relative rpc address, never an absolute on
   assert.match(code, /const RPC = 'rpc';/);
   assert.match(code, /method: 'tools\/call'/);
   assert.ok(!code.includes('/p/scribe'), "rpc.js names the Plugin's address by hand");
+});
+
+test('the Settings view offers each setting the operator chooses, with a place for its problem', async () => {
+  const html = await readFile(join(WEB, 'index.html'), 'utf8');
+
+  for (const name of ['whisper', 'whisperModel', 'minutesCommand', 'worklogPlugin']) {
+    assert.ok(html.includes(`id="set-${name}"`), `index.html has no field for ${name}`);
+    assert.ok(html.includes(`id="${name}-problem"`), `index.html has no place for ${name}'s`);
+    assert.ok(html.includes(`id="${name}-from"`), `index.html cannot say who decides ${name}`);
+  }
+  assert.ok(html.includes('href="#settings"'), 'nothing on the Page leads to the Settings view');
+});
+
+test('settings.js reads and changes the settings through the settings tools', async () => {
+  const code = await readFile(join(WEB, 'settings.js'), 'utf8');
+
+  assert.match(code, /call\('get_settings'/);
+  assert.match(code, /call\('update_settings'/);
+});
+
+test('settings.js loads before app.js, which shows it', async () => {
+  const paths = pathsIn(await readFile(join(WEB, 'index.html'), 'utf8'));
+
+  assert.ok(paths.includes('settings.js'), 'index.html does not load settings.js');
+  assert.ok(paths.indexOf('settings.js') < paths.indexOf('app.js'), 'settings.js loads too late');
 });

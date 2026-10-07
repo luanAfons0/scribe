@@ -2,7 +2,8 @@
    records. Everything it shows, it asks the Plugin Server for; the one thing
    it keeps is the capture of the Call it records, which lives only in this
    tab (ADR-0001). The address says what is shown: # for the list, #call/7
-   for one Call, so a reload shows the same thing. */
+   for one Call, #settings for the Settings view, so a reload shows the same
+   thing. */
 'use strict';
 
 const byId = (id) => document.getElementById(id);
@@ -12,6 +13,9 @@ const liveText = byId('live-text');
 const liveStop = byId('live-stop');
 const listView = byId('list-view');
 const callView = byId('call-view');
+const settingsView = byId('settings-view');
+const setupNote = byId('setup-note');
+const setupText = byId('setup-text');
 const startButton = byId('start');
 const callList = byId('calls');
 const noCalls = byId('no-calls');
@@ -115,6 +119,12 @@ async function showList() {
     }),
   );
   noCalls.hidden = listed.calls.length > 0;
+  // Without whisper.cpp no Call can record, so the list says why and where
+  // to fix it, rather than wait for Start to be refused.
+  const problem = await recordingProblem();
+  setupNote.hidden = problem === null;
+  setupText.textContent = problem || '';
+  if (problem !== null) startButton.disabled = true;
 }
 
 /** One Call, drawn whole. Answers whether it is still changing. */
@@ -217,15 +227,31 @@ async function showLive() {
 
 let timer = null;
 
+/** Whether the Settings view has been drawn since it was opened. */
+let settingsShown = false;
+
 /** Draw what the address names, and keep drawing while it changes. */
 async function show() {
   clearTimeout(timer);
   const id = shownId();
-  listView.hidden = id !== null;
+  const settings = location.hash === '#settings';
+  listView.hidden = id !== null || settings;
   callView.hidden = id === null;
+  settingsView.hidden = !settings;
   try {
     const running = await showLive();
-    const changing = id === null ? (await showList(), running !== null) : await showCall(id);
+    let changing = false;
+    if (settings) {
+      // The Settings view is drawn once when it opens, so a poll never
+      // writes over a field being typed in.
+      if (!settingsShown) await showSettings();
+      settingsShown = true;
+    } else if (id === null) {
+      await showList();
+      changing = running !== null;
+    } else {
+      changing = await showCall(id);
+    }
     say(null);
     if (changing || running !== null) timer = setTimeout(show, POLL_MS);
   } catch (fault) {
@@ -328,6 +354,7 @@ deleteButton.addEventListener('click', async () => {
 window.addEventListener('hashchange', () => {
   renaming(false);
   minutesForm.hidden = true;
+  settingsShown = false;
 });
 
 moreLines.addEventListener('click', () => {

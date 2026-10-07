@@ -18,6 +18,7 @@ const TOOLS = [
   'append_audio',
   'delete_call',
   'get_call',
+  'get_settings',
   'list_calls',
   'make_minutes',
   'rename_call',
@@ -25,6 +26,7 @@ const TOOLS = [
   'save_minutes',
   'start_call',
   'stop_call',
+  'update_settings',
 ];
 
 test('the Plugin Server answers the handshake', async (t) => {

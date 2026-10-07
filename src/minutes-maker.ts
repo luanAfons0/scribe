@@ -18,8 +18,8 @@ import {
 } from './calls.ts';
 import type { Command } from './command.ts';
 import { badInput, sentenceFor } from './mcp.ts';
-import { checkCommand, makeMinutes, promptFor } from './minutes.ts';
-import type { Settings } from './settings.ts';
+import { makeMinutes, promptFor } from './minutes.ts';
+import type { Choices, Settings } from './settings.ts';
 import { within, type Store } from './store.ts';
 
 /** What starts the Minutes of a Call. */
@@ -30,10 +30,15 @@ export type MinutesMaker = {
   heard(id: number): void;
 };
 
-/** The MinutesMaker, over one Store, asking whether Whisper is done. */
+/**
+ * The MinutesMaker, over one Store, asking whether Whisper is done. The
+ * command is read each time Minutes are made, so one set on the Plugin Page
+ * is used from the next Minutes on.
+ */
 export function minutesMakerFor(
   store: Store,
-  settings: Pick<Settings, 'minutesCommand' | 'minutesTimeoutMs'>,
+  settings: Pick<Settings, 'minutesTimeoutMs'>,
+  choices: Pick<Choices, 'minutesCommand' | 'minutesCommandSet'>,
   busyWith: (id: number) => boolean,
   made: (id: number) => void,
 ): MinutesMaker {
@@ -72,7 +77,7 @@ export function minutesMakerFor(
       if (call.minutesState === 'making') {
         throw badInput(`The Minutes of Call ${id} are being made already.`);
       }
-      begin(checkCommand(settings.minutesCommand), call);
+      begin(choices.minutesCommand(), call);
       return viewOf(store, id, false);
     },
 
@@ -84,10 +89,12 @@ export function minutesMakerFor(
         return; // The Call was deleted while Whisper read it.
       }
       if (call.state !== 'ended' || call.minutesState !== 'none') return;
-      if (settings.minutesCommand === null) return;
+      // With no command set, a Call records and its Transcript is made, and
+      // nothing more happens until someone asks (ADR-0002).
+      if (!choices.minutesCommandSet()) return;
       let command: Command;
       try {
-        command = checkCommand(settings.minutesCommand);
+        command = choices.minutesCommand();
       } catch (fault) {
         within(store, () => setMinutesState(store, id, 'failed', sentenceFor(fault)));
         return;
