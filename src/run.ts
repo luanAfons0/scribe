@@ -13,8 +13,10 @@
  * that starts a model — and ending only the wrapper would leave the model
  * running and holding the pipe open. On Linux the program leads a process
  * group of its own, and the group is killed; on Windows, `taskkill /T /F`.
+ * When the Plugin Server ends, every program it started that still runs is
+ * ended the same way, so none outlives it.
  */
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { extname, join } from 'node:path';
 import type { Command } from './command.ts';
 
@@ -30,6 +32,7 @@ export type Ran = {
   readonly timedOut: boolean;
 };
 
+/** What a program is given to run: its stdin, and how long it may take. */
 export type RunOptions = {
   /** Written to its stdin, which is then closed. Without it, stdin is closed at once. */
   readonly input?: string;
@@ -39,10 +42,18 @@ export type RunOptions = {
 
 const WINDOWS = process.platform === 'win32';
 
+/**
+ * Every program this Plugin Server started that still runs. None may outlive
+ * the Plugin Server: a model or a whisper.cpp left behind holds a CPU, and a
+ * file the next start needs, with nobody to answer.
+ */
+const running = new Set<ChildProcessWithoutNullStreams>();
+
 /** Run a command whose program is a path, and hand back how it ran. */
 export function run(command: Command, options: RunOptions): Promise<Ran> {
   return new Promise((done, fail) => {
     const child = start(command);
+    running.add(child);
     let stdout = '';
     let stderr = '';
     let timedOut = false;
@@ -50,23 +61,57 @@ export function run(command: Command, options: RunOptions): Promise<Ran> {
       timedOut = true;
       endTree(child);
     }, options.timeoutMs);
-    child.stdout!.setEncoding('utf8').on('data', (chunk: string) => (stdout += chunk));
-    child.stderr!.setEncoding('utf8').on('data', (chunk: string) => (stderr += chunk));
+    child.stdout.setEncoding('utf8').on('data', (chunk: string) => (stdout += chunk));
+    child.stderr.setEncoding('utf8').on('data', (chunk: string) => (stderr += chunk));
     // A program that never reads its stdin closes it early; that is its affair.
-    child.stdin!.on('error', () => {});
+    child.stdin.on('error', () => {});
     child.on('error', (fault) => {
+      running.delete(child);
       clearTimeout(timer);
       fail(fault);
     });
     child.on('close', (code) => {
+      running.delete(child);
       clearTimeout(timer);
       done({ code, stdout, stderr, timedOut });
     });
-    child.stdin!.end(options.input ?? '');
+    child.stdin.end(options.input ?? '');
   });
 }
 
-function start(command: Command): ChildProcess {
+/**
+ * End every program this Plugin Server started, each with its whole tree. It
+ * runs as the Plugin Server ends, so it does all it does before it returns.
+ */
+export function endEveryTree(): void {
+  for (const child of running) endTree(child);
+  running.clear();
+}
+
+/**
+ * Why a run failed, as one sentence that starts with what ran, or null when
+ * it ran to the end and exited with 0. What it said last on stderr is kept,
+ * because that is where a program says what went wrong.
+ */
+export function failureOf(ran: Ran, what: string, timeoutMs: number): string | null {
+  if (ran.timedOut) {
+    return (
+      `${what} ran longer than ${duration(timeoutMs)} and was stopped, with every process ` +
+      'it started.'
+    );
+  }
+  if (ran.code === 0) return null;
+  const ended = ran.code === null ? 'was ended by a signal' : `exited with ${ran.code}`;
+  const said = ran.stderr.trim().split('\n').pop()?.trim() ?? '';
+  return said === '' ? `${what} ${ended}.` : `${what} ${ended}: ${said}`;
+}
+
+/** A time a person reads: whole minutes when it is, seconds otherwise. */
+function duration(ms: number): string {
+  return ms % 60_000 === 0 ? `${ms / 60_000} minutes` : `${ms / 1000} s`;
+}
+
+function start(command: Command): ChildProcessWithoutNullStreams {
   const stdio: ['pipe', 'pipe', 'pipe'] = ['pipe', 'pipe', 'pipe'];
   if (!WINDOWS) {
     // A process group of its own, so that its whole tree can be ended at once.
@@ -84,7 +129,6 @@ function start(command: Command): ChildProcess {
     windowsVerbatimArguments: true,
   });
 }
-
 /** Every character `cmd.exe` reads as its own, which a caret makes plain. */
 const CMD_SPECIAL = /([()\][%!^"`<>&|;, *?])/g;
 
@@ -107,20 +151,55 @@ function forCmd(argument: string): string {
   return quoted.replace(CMD_SPECIAL, '^$1').replace(CMD_SPECIAL, '^$1');
 }
 
-/** End a program and every process it started. */
-function endTree(child: ChildProcess): void {
+/**
+ * End a program and every process it started: its process group on Linux, its
+ * tree on Windows. A group or a tree that cannot be ended is said on stderr;
+ * the program alone is not killed in its place, because that would leave what
+ * it started running with nobody to say so.
+ */
+function endTree(child: ChildProcessWithoutNullStreams): void {
+  // The program may have ended while what it started still runs, so the group
+  // or the tree is ended whatever the program's own state.
   if (child.pid === undefined) return;
-  if (WINDOWS) {
-    const system = process.env['SystemRoot'] ?? 'C:\\Windows';
-    spawn(join(system, 'System32', 'taskkill.exe'), ['/pid', String(child.pid), '/T', '/F'], {
-      stdio: 'ignore',
-      windowsHide: true,
-    }).on('error', () => child.kill());
-    return;
-  }
+  const failed = WINDOWS ? endWindowsTree(child.pid) : endGroup(child.pid);
+  if (failed === null) return;
+  process.stderr.write(`scribe: what a program started could not all be ended: ${failed}\n`);
+}
+
+/**
+ * End the process group a program leads on Linux. A negative id names the
+ * group. Null when it was ended, or a sentence that says why not.
+ */
+function endGroup(pid: number): string | null {
   try {
-    process.kill(-child.pid, 'SIGKILL');
-  } catch {
-    // The group is gone already.
+    process.kill(-pid, 'SIGKILL');
+    return null;
+  } catch (fault) {
+    // ESRCH alone means every process of the group has ended already.
+    if ((fault as NodeJS.ErrnoException).code === 'ESRCH') return null;
+    return `the group ${pid} could not be killed (${(fault as Error).message}).`;
   }
+}
+
+/**
+ * End a program's tree on Windows with `taskkill /T /F`, and wait for it, so
+ * that it is done when the Plugin Server ends. Null when it was ended, or a
+ * sentence when `taskkill.exe` could not start or exited with anything but 0.
+ */
+function endWindowsTree(pid: number): string | null {
+  const ended = spawnSync(taskkill(), ['/pid', String(pid), '/T', '/F'], {
+    stdio: 'ignore',
+    windowsHide: true,
+  });
+  if (ended.error !== undefined) return `${taskkill()} could not start (${ended.error.message}).`;
+  if (ended.status === 0) return null;
+  return `${taskkill()} exited with ${ended.status ?? 'a signal'}.`;
+}
+
+/**
+ * `taskkill.exe` by its absolute path in the Windows directory, so that a short
+ * PATH, or a program of the same name earlier on it, does not stand in for it.
+ */
+function taskkill(): string {
+  return join(process.env['SystemRoot'] ?? 'C:\\Windows', 'System32', 'taskkill.exe');
 }

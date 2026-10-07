@@ -30,6 +30,14 @@ A settings file that is not JSON does not end the Plugin Server either. The
 sentence that says so is shown beside every setting the file would decide,
 and saving from the Page writes a new file in its place.
 
+A variable that is set and not in its form does not decide. It is ignored, so
+the settings file decides, then the default, and `get_settings` and the
+Settings view show one sentence beside the setting, in `ignored`, that says the
+variable was ignored and to remove it from where the Host is started. The
+variable a 1.x systemd drop-in still sets, `SCRIBE_MINUTES_COMMAND` as a shell
+line, is the case this is for: the operator sets the command on the Page and
+needs nothing else. research ignores `RESEARCH_DIGEST_COMMAND` the same way.
+
 ## Consequences
 
 The Index Page shows scribe running even when it cannot record. The Plugin

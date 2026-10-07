@@ -104,7 +104,8 @@
   <!-- The settings the operator chooses, drawn by settings.js out of what
        get_settings answered. A field shows what settings.json holds; a
        variable set where the Host is started beats it, and the note under the
-       field says so. -->
+       field says so. A variable that is not in its form is ignored, and the
+       sentence under the field says to remove it. -->
   <section id="settings-view" hidden>
     <a class="back" href="#">← All Calls</a>
     <h2 class="call-title">Settings</h2>
@@ -118,6 +119,7 @@
         <input class="field" id="set-whisper" type="text" spellcheck="false"
           placeholder="The absolute path of whisper-cli">
         <p class="setting-from" id="whisper-from" hidden></p>
+        <p class="fault setting-problem" id="whisper-ignored" hidden></p>
         <p class="fault setting-problem" id="whisper-problem" hidden></p>
         <!-- Drawn by downloads.js: a build of whisper.cpp for this system,
              fetched only on a click, or how to get one where none is
@@ -137,6 +139,7 @@
         <input class="field" id="set-whisperModel" type="text" spellcheck="false"
           placeholder="The absolute path of ggml-small.bin">
         <p class="setting-from" id="whisperModel-from" hidden></p>
+        <p class="fault setting-problem" id="whisperModel-ignored" hidden></p>
         <p class="fault setting-problem" id="whisperModel-problem" hidden></p>
         <!-- Drawn by downloads.js: the models offered, of which the operator
              fetches one, on its own, only on a click. -->
@@ -163,6 +166,7 @@
           prompt on stdin and prints the Minutes. No shell runs it.
         </p>
         <p class="setting-from" id="minutesCommand-from" hidden></p>
+        <p class="fault setting-problem" id="minutesCommand-ignored" hidden></p>
         <p class="fault setting-problem" id="minutesCommand-problem" hidden></p>
       </div>
       <div class="setting">
@@ -173,6 +177,7 @@
           The Registry name of the Plugin a Call’s Entry goes to. Empty sends none.
         </p>
         <p class="setting-from" id="worklogPlugin-from" hidden></p>
+        <p class="fault setting-problem" id="worklogPlugin-ignored" hidden></p>
         <p class="fault setting-problem" id="worklogPlugin-problem" hidden></p>
       </div>
       <div class="acts">

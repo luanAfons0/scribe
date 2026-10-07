@@ -13,6 +13,7 @@ import {
   makeDirectory,
   minutesCommand,
   startedAndShaken,
+  structureOf,
   type Started,
 } from './helpers/plugin.ts';
 
@@ -73,18 +74,21 @@ test('the prompt holds the Jottings, the Transcript and the rules', async (t) =>
   assert.ok(prompt.includes('in its order'), 'no rule on keeping the headings in order');
 });
 
-test('with no command set, Make Minutes is refused with a sentence and the Transcript is there', async (t) => {
-  const plugin = await startedAndShaken(t);
-  const id = await stoppedCall(plugin);
-  const call = await transcribed(plugin, id);
+test(
+  'with no command set, Make Minutes is refused with a sentence and the Transcript is there',
+  async (t) => {
+    const plugin = await startedAndShaken(t);
+    const id = await stoppedCall(plugin);
+    const call = await transcribed(plugin, id);
 
-  const answer = await plugin.call('make_minutes', { id });
+    const answer = await plugin.call('make_minutes', { id });
 
-  assert.equal(answer.error?.code, -32602);
-  assert.ok(answer.error?.message.includes('SCRIBE_MINUTES_COMMAND'), answer.error?.message);
-  assert.equal(call.minutesState, 'none');
-  assert.equal(call.transcript.length, 2);
-});
+    assert.equal(answer.error?.code, -32602);
+    assert.ok(answer.error?.message.includes('SCRIBE_MINUTES_COMMAND'), answer.error?.message);
+    assert.equal(call.minutesState, 'none');
+    assert.equal(call.transcript.length, 2);
+  },
+);
 
 test('a command that is not found is refused with a sentence that names the setting', async (t) => {
   const plugin = await startedAndShaken(t, {
@@ -126,40 +130,52 @@ test('every argument reaches the Minutes command as it was written, with no shel
   assert.deepEqual(JSON.parse(await readFile(log, 'utf8')), args);
 });
 
-test('a program named with no directory is found on the PATH, as name.cmd on Windows', async (t) => {
-  // Windows spells it Path, and an environment with both would be two variables.
-  const key = Object.keys(process.env).find((name) => name.toUpperCase() === 'PATH') ?? 'PATH';
-  const plugin = await startedAndShaken(t, {
-    env: {
-      SCRIBE_MINUTES_COMMAND: '["minutes"]',
-      [key]: `${FIXTURES}${delimiter}${process.env[key] ?? ''}`,
-    },
-  });
-  const id = await stoppedCall(plugin);
+test(
+  'a program named with no directory is found on the PATH, as name.cmd on Windows',
+  async (t) => {
+    // Windows spells it Path, and an environment with both would be two variables.
+    const key = Object.keys(process.env).find((name) => name.toUpperCase() === 'PATH') ?? 'PATH';
+    const plugin = await startedAndShaken(t, {
+      env: {
+        SCRIBE_MINUTES_COMMAND: '["minutes"]',
+        [key]: `${FIXTURES}${delimiter}${process.env[key] ?? ''}`,
+      },
+    });
+    const id = await stoppedCall(plugin);
 
-  const call = await until(
-    plugin,
-    id,
-    (seen) => seen.minutesState !== 'none' && seen.minutesState !== 'making',
-  );
+    const call = await until(
+      plugin,
+      id,
+      (seen) => seen.minutesState !== 'none' && seen.minutesState !== 'making',
+    );
 
-  assert.equal(call.minutesState, 'made', call.minutesError ?? '');
-});
+    assert.equal(call.minutesState, 'made', call.minutesError ?? '');
+  },
+);
 
-test('a command not written as a list of strings is refused with a sentence that says the form', async (t) => {
-  const plugin = await startedAndShaken(t, {
-    env: { SCRIBE_MINUTES_COMMAND: 'ollama run llama3' },
-  });
-  const id = await stoppedCall(plugin);
-  const call = await until(plugin, id, (seen) => seen.minutesState === 'failed');
+test(
+  'a command variable that is not a list of strings is ignored, and Make Minutes says none is set',
+  async (t) => {
+    const plugin = await startedAndShaken(t, {
+      env: { SCRIBE_MINUTES_COMMAND: 'ollama run llama3' },
+    });
+    const id = await stoppedCall(plugin);
+    const call = await transcribed(plugin, id);
 
-  const answer = await plugin.call('make_minutes', { id });
+    const answer = await plugin.call('make_minutes', { id });
+    const settings = structureOf<{
+      settings: { minutesCommand: { from: string; ignored: string | null } };
+    }>(await plugin.call('get_settings')).settings;
 
-  assert.equal(answer.error?.code, -32602);
-  assert.ok(answer.error?.message.includes('SCRIBE_MINUTES_COMMAND'), answer.error?.message);
-  assert.ok(answer.error?.message.includes('["ollama","run","<model>"]'), answer.error?.message);
-  assert.equal(call.transcript.length, 2);
-});
+    assert.equal(answer.error?.code, -32602);
+    assert.ok(answer.error?.message.includes('needs a Minutes command'), answer.error?.message);
+    assert.equal(settings.minutesCommand.from, 'default');
+    assert.ok(settings.minutesCommand.ignored?.includes('SCRIBE_MINUTES_COMMAND'));
+    assert.ok(settings.minutesCommand.ignored?.includes('["ollama","run","<model>"]'));
+    assert.equal(call.minutesState, 'none');
+    assert.equal(call.transcript.length, 2);
+  },
+);
 
 test('a command that fails leaves the Minutes failed, with what it said', async (t) => {
   const plugin = await startedAndShaken(t, {

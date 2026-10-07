@@ -41,6 +41,17 @@ Plugin directory, and its absolute path written into `settings.json`, so
 nothing else has to be set. `downloads/` is the Plugin's own, beside
 `scribe.db` (FirstMate ADR-0005), and Git ignores it.
 
+A build of the same release fetched again takes the place of the one in use
+without ever losing it: the old one is set aside, the new one renamed into its
+place, and the old one removed only once the setting is saved. A rename or a
+save that fails puts the old one back and removes the new files. A Plugin
+Server that stops halfway leaves `.part` files, and maybe a build set aside;
+the next start removes every `.part` under `downloads/`, and puts the build
+set aside back, or removes it when a new one took its place.
+
+The list names the model the Page offers first, `defaultModel`, as data like
+the rest of it.
+
 `SCRIBE_DOWNLOADS` names a list of the same form read in place of scribe's
 own. It is how a test serves fixture archives from a local server with their
 own checksums. Whoever sets it already sets `SCRIBE_WHISPER`, which names the
@@ -60,7 +71,10 @@ tar, with their long names — and refuses the rest with a sentence: an
 encrypted, split or ZIP64 zip, an entry of a kind it does not know. Every
 entry must land inside the directory it is unpacked into; a name that is
 absolute or climbs out with `..` is refused, and so is a link whose target is
-not in the archive. A link is written as a copy of its target, because
+not in the archive. The reader trusts no length the archive gives: an entry
+that runs past the end of the archive, a tar size that is not a number, a zip
+entry that unpacks to more than its declared size, and a path that is in the
+archive twice are each refused. A link is written as a copy of its target, because
 Windows lets few accounts make one, and the Linux build names its libraries
 through links (`libwhisper.so.1` → `libwhisper.so.1.9.4`). The build's
 whisper-cli finds them beside it, by its `$ORIGIN` run path.

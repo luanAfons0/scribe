@@ -13,6 +13,8 @@
  * - The models are files of `ggerganov/whisper.cpp` on Hugging Face, at one
  *   commit, so the bytes behind an address never change. Their SHA-256 is
  *   the Git LFS object id Hugging Face gives each file.
+ * - `defaultModel` names the model the Page offers first: the one that was
+ *   measured to keep up with a live Call.
  *
  * `SCRIBE_DOWNLOADS` names another file of the same form, read in place of
  * this one. It is how a test serves its own fixtures; an operator has no
@@ -53,6 +55,8 @@ export type Downloads = {
   };
   /** The models offered, in the order the Page offers them. */
   readonly models: readonly Model[];
+  /** The model the Page offers first, by its name, or null for the first one. */
+  readonly defaultModel: string | null;
 };
 
 /** This system and architecture, as the list names a build. */
@@ -72,7 +76,11 @@ export function readDownloads(env: NodeJS.ProcessEnv = process.env): Downloads {
   } catch (fault) {
     throw wrong(`cannot be read as JSON: ${(fault as Error).message}`);
   }
-  const top = whole as { whisper?: { release?: unknown; builds?: unknown }; models?: unknown };
+  const top = whole as {
+    whisper?: { release?: unknown; builds?: unknown };
+    models?: unknown;
+    defaultModel?: unknown;
+  };
   if (typeof top?.whisper?.release !== 'string') throw wrong('needs whisper.release');
   const builds = top.whisper.builds;
   if (typeof builds !== 'object' || builds === null || Array.isArray(builds)) {
@@ -85,13 +93,22 @@ export function readDownloads(env: NodeJS.ProcessEnv = process.env): Downloads {
     }
   }
   if (!Array.isArray(top.models)) throw wrong('needs models as an array');
+  const offered: string[] = [];
   for (const model of top.models) {
     const name = (model as Record<string, unknown> | null)?.['name'];
     if (!isDownload(model) || typeof name !== 'string' || !/^[\w.-]+$/.test(name)) {
       throw wrong('has a model without a plain file name, url, size and sha256');
     }
+    offered.push(name);
   }
-  return whole as Downloads;
+  const defaultModel = top.defaultModel ?? null;
+  if (
+    defaultModel !== null &&
+    (typeof defaultModel !== 'string' || !offered.includes(defaultModel))
+  ) {
+    throw wrong('has a defaultModel that is not the name of one of its models');
+  }
+  return { ...(whole as Downloads), defaultModel };
 }
 
 function isDownload(given: unknown): given is Download & Record<string, unknown> {

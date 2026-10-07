@@ -105,6 +105,8 @@ export async function downloadsFile(
     readonly release?: string;
     readonly builds: Readonly<Record<string, Build>>;
     readonly models: readonly Model[];
+    /** The model the Page offers first; without one, the first model, or none. */
+    readonly defaultModel?: string | null;
   },
 ): Promise<Record<string, string>> {
   const directory = await makeDirectory(t);
@@ -112,6 +114,8 @@ export async function downloadsFile(
   const whole = {
     whisper: { release: list.release ?? 'v0.0.1', builds: list.builds },
     models: list.models,
+    defaultModel:
+      list.defaultModel === undefined ? (list.models[0]?.name ?? null) : list.defaultModel,
   };
   await writeFile(path, JSON.stringify(whole));
   return { SCRIBE_DOWNLOADS: path };

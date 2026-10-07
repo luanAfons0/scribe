@@ -4,8 +4,11 @@
 
    A field shows what settings.json holds. When a variable set where the Host
    is started decides a setting, the note under its field says so, and what
-   is saved here waits until the variable is gone. What is missing or wrong
-   is the Plugin Server's own sentence, shown beside the setting it names.
+   is saved here waits until the variable is gone. A variable that is not in
+   its form, such as the shell line of scribe 1.x, decides nothing, and the
+   Plugin Server's sentence beside the setting says to remove it. What is
+   missing or wrong is the Plugin Server's own sentence, shown beside the
+   setting it names.
 
    Under whisper.cpp and its model, downloads.js offers to fetch them.
 
@@ -49,6 +52,9 @@ function drawSettings(settings, fill) {
       setting.variable + ' decides this where the Host is started' +
       (setting.value === null ? '' : ': ' + fieldText(setting.value)) +
       '. What is saved here is used once it is not set.';
+    const ignored = document.getElementById(name + '-ignored');
+    ignored.hidden = setting.ignored === null;
+    ignored.textContent = setting.ignored || '';
     const problem = document.getElementById(name + '-problem');
     problem.hidden = setting.problem === null;
     problem.textContent = setting.problem || '';
@@ -57,8 +63,9 @@ function drawSettings(settings, fill) {
 
 /** Show the Settings view, with what the Plugin Server holds now, and what it can fetch. */
 async function showSettings() {
-  drawSettings((await call('get_settings')).settings, true);
-  await showDownloads();
+  const settings = (await call('get_settings')).settings;
+  drawSettings(settings, true);
+  await showDownloads(settings);
 }
 
 /** The sentence that says why no Call can record, or null when one can. */

@@ -10,7 +10,7 @@
  */
 import { forget, spokenBetween, type Window } from './audio.ts';
 import { sentenceFor } from './mcp.ts';
-import { run } from './run.ts';
+import { failureOf, run } from './run.ts';
 import type { Choices } from './settings.ts';
 import { within, type Store } from './store.ts';
 
@@ -118,13 +118,8 @@ async function hear(choices: Pick<Choices, 'whisper'>, window: Window): Promise<
   ];
   return run({ program: whisper.program, args }, { timeoutMs: WHISPER_TIMEOUT_MS }).then(
     (ran) => {
-      if (ran.timedOut) {
-        throw new Error(`whisper.cpp ran longer than ${WHISPER_TIMEOUT_MS / 60_000} minutes.`);
-      }
-      if (ran.code !== 0) {
-        const said = ran.stderr.trim().split('\n').pop() ?? '';
-        throw new Error(said === '' ? `whisper.cpp exited with ${ran.code}.` : said);
-      }
+      const failed = failureOf(ran, 'whisper.cpp', WHISPER_TIMEOUT_MS);
+      if (failed !== null) throw new Error(failed);
       return parse(ran.stdout);
     },
   );

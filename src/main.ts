@@ -15,6 +15,7 @@ import { fetcherFor } from './fetcher.ts';
 import { sentenceFor, serve } from './mcp.ts';
 import { minutesMakerFor, type MinutesMaker } from './minutes-maker.ts';
 import { recorderFor } from './recorder.ts';
+import { endEveryTree } from './run.ts';
 import { openChoices, readSettings } from './settings.ts';
 import { openStore } from './store.ts';
 import { toolsFor } from './tools.ts';
@@ -59,3 +60,16 @@ const recorder = recorderFor(store, transcriber, settings, choices, heard);
 const fetcher = fetcherFor(downloads, choices, settings);
 
 serve(toolsFor({ store, recorder, transcriber, maker, choices, fetcher }), receive);
+
+// No whisper.cpp and no Minutes command outlives the Plugin Server (ADR-0003).
+// The Host closes stdin to stop it, and nobody is left to answer then, so it
+// ends what it started and goes at once. A signal does the same, and then
+// ends it as the signal would have.
+process.on('exit', endEveryTree);
+process.stdin.on('end', () => process.exit(0));
+for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) {
+  process.once(signal, () => {
+    endEveryTree();
+    process.kill(process.pid, signal);
+  });
+}

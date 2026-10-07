@@ -214,8 +214,9 @@ export function toolsFor(parts: Parts): readonly Tool[] {
         'worklogPlugin (the Plugin a Call\'s Entry goes to). Each has the value scribe uses ' +
         '(null for none); from: "environment" when its variable is set, "file" when the ' +
         'settings file holds it, "default" for none; saved, what the settings file holds; ' +
-        'variable, the one that beats the file; and problem, the one sentence that says what ' +
-        'is missing or wrong, or null.',
+        'variable, the one that beats the file; problem, the one sentence that says what ' +
+        'is missing or wrong, or null; and ignored, the one sentence that says its variable ' +
+        'is set, not in its form, and ignored, or null.',
       inputSchema: { type: 'object', properties: {}, required: [] },
       call: () => told({ settings: choices.view() }),
     },
