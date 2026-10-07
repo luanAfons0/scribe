@@ -12,7 +12,7 @@
 import { callPlugin, type BusResult } from './bus.ts';
 import { keepEntry, setEntryError, viewOf, type CallView } from './calls.ts';
 import { sentenceFor } from './mcp.ts';
-import type { Settings } from './settings.ts';
+import type { Choices, Settings } from './settings.ts';
 import { within, type Store } from './store.ts';
 
 /** What sends a Call's Entry to Worklog. */
@@ -21,10 +21,11 @@ export type EntrySender = {
   made(id: number): void;
 };
 
-/** The EntrySender, over one Store, to the Worklog Plugin the settings name. */
+/** The EntrySender, over one Store, to the Worklog Plugin the settings name when Minutes are made. */
 export function entrySenderFor(
   store: Store,
-  settings: Pick<Settings, 'worklogPlugin' | 'worklogWaitMs'>,
+  settings: Pick<Settings, 'worklogWaitMs'>,
+  choices: Pick<Choices, 'worklogPlugin'>,
 ): EntrySender {
   const failed = (id: number, sentence: string): void => {
     try {
@@ -85,7 +86,7 @@ export function entrySenderFor(
 
   return {
     made(id) {
-      const plugin = settings.worklogPlugin;
+      const plugin = choices.worklogPlugin();
       if (plugin === null) return;
       let call: CallView;
       try {

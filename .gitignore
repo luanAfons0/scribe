@@ -12,3 +12,8 @@ scribe.db-shm
 
 # Audio that waits for Whisper. It lives only until its window is transcribed.
 audio/
+
+# The settings the operator chose on the Plugin Page, and the file a save
+# writes before it is renamed over them.
+settings.json
+settings.json.next

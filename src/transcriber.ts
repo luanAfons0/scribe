@@ -11,7 +11,7 @@
 import { forget, spokenBetween, type Window } from './audio.ts';
 import { sentenceFor } from './mcp.ts';
 import { run } from './run.ts';
-import type { Settings } from './settings.ts';
+import type { Choices } from './settings.ts';
 import { within, type Store } from './store.ts';
 
 /** How many threads whisper.cpp is given: what was measured to keep up. */
@@ -37,7 +37,7 @@ const LINE = /^\[(\d+):(\d\d):(\d\d)\.(\d{3}) --> (\d+):(\d\d):(\d\d)\.(\d{3})\]
  */
 export function transcriberFor(
   store: Store,
-  settings: Settings,
+  choices: Pick<Choices, 'whisper'>,
   idle: (callId: number) => void,
 ): Transcriber {
   const queue: Window[] = [];
@@ -58,7 +58,7 @@ export function transcriberFor(
     // A fault here — Whisper's, or keeping what it heard — loses one window
     // and says so in the journal. It never takes the Plugin Server down, and
     // the windows after it are still read.
-    (gone() ? Promise.resolve([]) : hear(settings, window))
+    (gone() ? Promise.resolve([]) : hear(choices, window))
       .then((lines) => keep(store, window, lines.filter((line) => heardOn(window, line))))
       .catch((fault: unknown) => {
         if (gone()) return;
@@ -98,10 +98,15 @@ export function transcriberFor(
 
 type Heard = { readonly startMs: number; readonly endMs: number; readonly text: string };
 
-/** What whisper.cpp heard in one window, each line timed within it. */
-function hear(settings: Settings, window: Window): Promise<readonly Heard[]> {
+/**
+ * What whisper.cpp heard in one window, each line timed within it. whisper.cpp
+ * is read for each window, so one set on the Plugin Page is used from the
+ * next window on.
+ */
+async function hear(choices: Pick<Choices, 'whisper'>, window: Window): Promise<readonly Heard[]> {
+  const whisper = choices.whisper();
   const args = [
-    '-m', settings.model,
+    '-m', whisper.model,
     '-l', 'pt',
     '-t', String(THREADS),
     '-bs', '1',
@@ -111,7 +116,7 @@ function hear(settings: Settings, window: Window): Promise<readonly Heard[]> {
     '-sns',
     '-f', window.path,
   ];
-  return run({ program: settings.whisper, args }, { timeoutMs: WHISPER_TIMEOUT_MS }).then(
+  return run({ program: whisper.program, args }, { timeoutMs: WHISPER_TIMEOUT_MS }).then(
     (ran) => {
       if (ran.timedOut) {
         throw new Error(`whisper.cpp ran longer than ${WHISPER_TIMEOUT_MS / 60_000} minutes.`);

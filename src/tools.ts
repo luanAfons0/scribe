@@ -24,6 +24,7 @@ import { badInput } from './mcp.ts';
 import type { Tool, ToolResult } from './mcp.ts';
 import type { MinutesMaker } from './minutes-maker.ts';
 import type { Recorder } from './recorder.ts';
+import type { Choices } from './settings.ts';
 import { within, type Store } from './store.ts';
 import type { Transcriber } from './transcriber.ts';
 
@@ -35,10 +36,12 @@ export type Parts = {
   readonly recorder: Recorder;
   readonly transcriber: Transcriber;
   readonly maker: MinutesMaker;
+  readonly choices: Choices;
 };
 
 /** The tools, over the parts of one running Plugin Server. */
-export function toolsFor({ store, recorder, transcriber, maker }: Parts): readonly Tool[] {
+export function toolsFor(parts: Parts): readonly Tool[] {
+  const { store, recorder, transcriber, maker, choices } = parts;
   const view = (id: number) => viewOf(store, id, transcriber.busyWith(id));
 
   return [
@@ -71,7 +74,8 @@ export function toolsFor({ store, recorder, transcriber, maker }: Parts): readon
     {
       name: 'start_call',
       description:
-        'Start a Call. It is refused while another Call records, with a sentence that names it.',
+        'Start a Call. It is refused while another Call records, with a sentence that names it, ' +
+        'and while whisper.cpp or its model is missing, with a sentence that names the setting.',
       inputSchema: { type: 'object', properties: {}, required: [] },
       call: () => told({ call: recorder.start() }),
     },
@@ -142,7 +146,7 @@ export function toolsFor({ store, recorder, transcriber, maker }: Parts): readon
       name: 'make_minutes',
       description:
         'Make the Minutes of a Call again, from its Jottings and its Transcript, with the ' +
-        'command in SCRIBE_MINUTES_COMMAND. It starts the work and answers the Call at once; ' +
+        'Minutes command in get_settings. It starts the work and answers the Call at once; ' +
         'get_call shows minutesState "made", or "failed" with minutesError.',
       inputSchema: { type: 'object', properties: { id: ID }, required: ['id'] },
       call: (given) => told({ call: maker.make(checkCallId('make_minutes', given['id'])) }),
@@ -197,6 +201,58 @@ export function toolsFor({ store, recorder, transcriber, maker }: Parts): readon
         const deleted = within(store, () => deleteCall(store, id));
         forgetCall(id);
         return told(deleted);
+      },
+    },
+
+    {
+      name: 'get_settings',
+      description:
+        'The settings the operator chooses: whisper (the whisper.cpp executable), whisperModel ' +
+        '(its model), minutesCommand (the program and arguments that make the Minutes) and ' +
+        'worklogPlugin (the Plugin a Call\'s Entry goes to). Each has the value scribe uses ' +
+        '(null for none); from: "environment" when its variable is set, "file" when the ' +
+        'settings file holds it, "default" for none; saved, what the settings file holds; ' +
+        'variable, the one that beats the file; and problem, the one sentence that says what ' +
+        'is missing or wrong, or null.',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+      call: () => told({ settings: choices.view() }),
+    },
+
+    {
+      name: 'update_settings',
+      description:
+        'Change the settings the operator chooses, and keep them in settings.json in the ' +
+        'Plugin directory. What is not given is kept; null takes a setting out of the file. ' +
+        'A variable that is set still decides its setting. A bad value is refused with one ' +
+        'sentence, and the file is left as it was. It answers what get_settings answers.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          whisper: {
+            type: ['string', 'null'],
+            description: 'The absolute path of the whisper.cpp executable, whisper-cli.',
+          },
+          whisperModel: {
+            type: ['string', 'null'],
+            description: 'The absolute path of the whisper.cpp model, such as ggml-small.bin.',
+          },
+          minutesCommand: {
+            type: ['array', 'null'],
+            items: { type: 'string' },
+            description:
+              'The command that makes the Minutes: the program, then each of its arguments. ' +
+              'It reads a prompt on stdin and prints the Minutes.',
+          },
+          worklogPlugin: {
+            type: ['string', 'null'],
+            description: "The Registry name of the Worklog Plugin a Call's Entry goes to.",
+          },
+        },
+        required: [],
+      },
+      call: (given) => {
+        choices.update(given);
+        return told({ settings: choices.view() });
       },
     },
   ];

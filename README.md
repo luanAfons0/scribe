@@ -39,40 +39,7 @@ sh ./models/download-ggml-model.sh small
 That gives the executable `~/whisper.cpp/build/bin/whisper-cli` and the model
 `~/whisper.cpp/models/ggml-small.bin` (about 470 MB). `small` keeps up with a
 live Call on an 8-core CPU; `medium` and `large-v3-turbo` are too slow for
-that.
-
-## Settings
-
-The Plugin Server reads these from its environment, which is the Host's:
-
-| Variable                 | What it is                                              |
-| ------------------------ | ------------------------------------------------------- |
-| `SCRIBE_WHISPER`         | The absolute path of `whisper-cli`. Required.           |
-| `SCRIBE_WHISPER_MODEL`   | The absolute path of the model file. Required.          |
-| `SCRIBE_MINUTES_COMMAND` | The command that makes the Minutes, as a JSON array: the program, then its arguments. Optional; see below. |
-| `SCRIBE_MINUTES_TIMEOUT_MS` | How long the Minutes command may run before it is ended. Default 900000 (15 minutes). |
-| `SCRIBE_NODE`            | The Node 24 that `mcp` runs in a `wsl` Place, when `PATH` has none. |
-| `SCRIBE_CUT_AFTER_MS`    | How long a Call may go without audio before it is Cut. Default 60000. |
-| `SCRIBE_WORKLOG_PLUGIN`  | The Registry name of the Worklog Plugin a Call's Entry goes to. Optional; see below. |
-| `SCRIBE_WORKLOG_WAIT_MS` | How long scribe waits for Worklog to answer. Default 30000. |
-
-With `SCRIBE_WHISPER` or `SCRIBE_WHISPER_MODEL` not set, or not a file, the
-Plugin Server exits at start with one sentence that names it, and the Index
-Page shows the Plugin Stopped. The sentence is in the journal:
-`journalctl --user -u firstmate -f`.
-
-When the Host runs as a systemd service, give it the settings with a drop-in,
-which `firstmate service on` leaves alone:
-
-```sh
-systemctl --user edit firstmate
-```
-
-```ini
-[Service]
-Environment=SCRIBE_WHISPER=/home/you/whisper.cpp/build/bin/whisper-cli
-Environment=SCRIBE_WHISPER_MODEL=/home/you/whisper.cpp/models/ggml-small.bin
-```
+that. Give both paths to scribe in its Settings (see "Set it up").
 
 ## Install it
 
@@ -84,6 +51,55 @@ systemctl --user restart firstmate
 ```
 
 Then open the Index Page, find `scribe`, and open its Plugin Page.
+
+## Set it up
+
+Open scribe's Plugin Page and press **Settings**, at the right of its bar.
+Set it up there, once, however the Host was started: the FirstMate App, a
+shell or a systemd service.
+
+| Setting                | What it is                                              |
+| ---------------------- | ------------------------------------------------------- |
+| whisper.cpp executable | The absolute path of `whisper-cli` (`whisper-cli.exe` on Windows). Needed to record. |
+| whisper.cpp model      | The absolute path of the model file, `ggml-small.bin`. Needed to record. |
+| Minutes command        | The command that makes the Minutes, as a JSON array: the program, then its arguments. Optional; see below. |
+| Worklog Plugin         | The Registry name of the Worklog Plugin a Call's Entry goes to. Optional; see below. |
+
+scribe keeps them in `settings.json`, in its own Plugin directory, beside
+`scribe.db`. A field left empty is none. A value that is not in its form, such
+as a path that is not absolute, is refused with one sentence, and nothing is
+saved.
+
+Until whisper.cpp and its model are set, scribe runs and its Plugin Page
+works, but no Call can record: Start is refused with one sentence that names
+the setting, and the list of Calls and the Settings view both show it. The
+same holds for a path where there is no file. Each change is used from the
+next window and the next Minutes on, with no restart.
+
+### Variables
+
+Each setting has a variable of the same meaning, which beats what is saved on
+the Page. When one is set, the Settings view says that the variable decides
+it. A variable set to nothing decides nothing.
+
+| Variable                 | What it is                                              |
+| ------------------------ | ------------------------------------------------------- |
+| `SCRIBE_WHISPER`         | The whisper.cpp executable.                             |
+| `SCRIBE_WHISPER_MODEL`   | The whisper.cpp model.                                  |
+| `SCRIBE_MINUTES_COMMAND` | The Minutes command, as a JSON array.                   |
+| `SCRIBE_WORKLOG_PLUGIN`  | The Worklog Plugin.                                     |
+
+These are set in the environment alone:
+
+| Variable                 | What it is                                              |
+| ------------------------ | ------------------------------------------------------- |
+| `SCRIBE_MINUTES_TIMEOUT_MS` | How long the Minutes command may run before it is ended. Default 900000 (15 minutes). |
+| `SCRIBE_CUT_AFTER_MS`    | How long a Call may go without audio before it is Cut. Default 60000. |
+| `SCRIBE_WORKLOG_WAIT_MS` | How long scribe waits for Worklog to answer. Default 30000. |
+| `SCRIBE_NODE`            | The Node 24 that `mcp` runs in a `wsl` Place, when `PATH` has none. |
+
+One of the times that is not a whole number stops the Plugin Server at start
+with one sentence that names it, and the Index Page shows the Plugin Stopped.
 
 ## Record a Call
 
@@ -113,7 +129,7 @@ given to Whisper, because Whisper makes words up out of silence.
 ### The Minutes
 
 When you press Stop and Whisper has read the last of the audio, scribe makes
-the Minutes at once with the command in `SCRIBE_MINUTES_COMMAND`. It writes a
+the Minutes at once with the Minutes command. It writes a
 prompt to the command's stdin — your Jottings, the Transcript, and the rules —
 and reads the Minutes from its stdout. The rules ask for:
 
@@ -134,7 +150,7 @@ is how you get Minutes at all.
 scribe knows no model and holds no key (ADR-0002). Any command that reads a
 prompt on stdin and prints text will do.
 
-`SCRIBE_MINUTES_COMMAND` is a JSON array of strings: the program first, then
+The Minutes command is a JSON array of strings: the program first, then
 each of its arguments, as `["ollama","run","<model>"]`. No shell runs it, on
 any system (ADR-0003), so each argument reaches the program exactly as it is
 written, spaces and quotes too, and there is no `&&`, no `|` and no `cd`. On
@@ -145,8 +161,8 @@ with each extension in `PATHEXT`.
 
 **The command this project uses is Claude Code in print mode:**
 
-```ini
-Environment='SCRIBE_MINUTES_COMMAND=["/home/you/.local/bin/claude","-p","--tools","","--setting-sources","","--no-session-persistence","--model","sonnet"]'
+```json
+["/home/you/.local/bin/claude","-p","--tools","","--setting-sources","","--no-session-persistence","--model","sonnet"]
 ```
 
 Why each part is there:
@@ -165,15 +181,16 @@ It uses the login `claude` already has, so there is no key to set.
 > but the Jottings and every word of the Transcript go to Anthropic when the
 > Minutes are made. For a Call that must stay local, use a local model
 > instead, through [Ollama](https://ollama.com):
-> `SCRIBE_MINUTES_COMMAND=["/usr/local/bin/ollama","run","<model>"]`. The same holds
+> `["/usr/local/bin/ollama","run","<model>"]`. The same holds
 > for any other cloud CLI, such as `["codex","exec","-"]`.
 
-The command runs under the Host's service, whose `PATH` has no nvm and no
-`~/.local/bin`. Give the command its absolute path: a command installed
+The command runs with the Host's `PATH`, which under a service has no nvm and
+no `~/.local/bin`. Give the program its absolute path: a command installed
 through nvm needs one too, such as `/home/you/.nvm/versions/node/v24.15.0/bin/codex`.
+A program that is not found is shown beside the setting.
 
 With no command set, recording and the Transcript still work. Only Make Minutes
-is refused, with a sentence that names `SCRIBE_MINUTES_COMMAND`. So is a
+is refused, with a sentence that says to set the Minutes command. So is a
 command that is not a JSON array of strings, or whose program is not found. A
 command that fails leaves the Minutes failed, with the last line it said on
 stderr. A command that runs longer than `SCRIBE_MINUTES_TIMEOUT_MS` is ended
@@ -193,21 +210,18 @@ Reunião 14:00 - 15:10: Prazo da entrega
 Its body is the Topics. Nothing else leaves scribe: not the Jottings, not the
 Transcript, not the Minutes.
 
-Turn it on in two steps. Give scribe a Grant to call Worklog, and name
-Worklog in the service's drop-in, then restart the Host:
+Turn it on in two steps. Give scribe a Grant to call Worklog:
 
 ```sh
 firstmate grant scribe worklog
 ```
 
-```ini
-Environment=SCRIBE_WORKLOG_PLUGIN=worklog
-```
+Then set **Worklog Plugin** to `worklog` in Settings.
 
 **Make Minutes again** changes the same Entry rather than adding one. Minutes
 edited by hand send nothing. When the Entry cannot be sent — no Grant,
 Worklog Stopped, no answer, or Minutes with no Topics — the Minutes stay as
-they are, and the Call's page says why. Without `SCRIBE_WORKLOG_PLUGIN`, scribe
+they are, and the Call's page says why. With no Worklog Plugin set, scribe
 sends nothing and says nothing.
 
 ### Find a Call again

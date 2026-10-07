@@ -323,3 +323,56 @@ h3.section-label { margin-top: 24px; }
 .minutes-form .acts { margin-top: 8px; }
 
 .act.more { display: block; width: 100%; margin-bottom: 6px; font-weight: 400; color: var(--muted); }
+
+/* The way to the Settings view, at the far end of the bar. */
+.bar-link {
+  margin-left: auto;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.bar-link:hover { text-decoration: underline; }
+
+/* What scribe needs before a Call can record. Amber, as a Cut is: red stays
+   for a Call that records. */
+.setup-note {
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border-left: 4px solid var(--cut);
+  background: var(--surface);
+}
+
+.setup-note a { color: var(--accent); font-weight: 600; }
+
+.settings { margin-top: 16px; }
+
+.setting {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.setting .section-label { display: block; }
+
+.field {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  color: var(--ink);
+  font: 14px/1.4 var(--mono);
+}
+
+.field:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.setting-help, .setting-from, .setting-problem { margin: 6px 0 0; font-size: 13px; }
+.setting-help { color: var(--faint); }
+.setting-from { color: var(--muted); }
+
+.settings .acts { align-items: center; }
+.saved { color: var(--muted); }
