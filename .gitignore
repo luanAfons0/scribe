@@ -17,3 +17,7 @@ audio/
 # writes before it is renamed over them.
 settings.json
 settings.json.next
+
+# whisper.cpp and the models fetched from the Plugin Page, and a download that
+# is not yet checked.
+downloads/

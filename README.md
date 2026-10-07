@@ -18,14 +18,38 @@ is recorded in a browser tab and why the Minutes come from a command.
   service's `PATH` there often has only an older Node, so `mcp` looks for one
   in this order: `SCRIBE_NODE`, `node` on `PATH`, then every Node under nvm.
   With none, it says so in one sentence and the Plugin is Stopped.
-- **whisper.cpp** and its `small` model, which turn the audio into the
-  Transcript on the CPU. On Windows the executable is `whisper-cli.exe`.
+- **whisper.cpp** and a model, which turn the audio into the Transcript on
+  the CPU. scribe fetches both from its Plugin Page when you ask, on Windows
+  and on Linux, x64 and arm64. You can also build whisper.cpp yourself. On
+  Windows the executable is `whisper-cli.exe`.
 - **Chrome or Edge**, for the tab that records the Call. Firefox and Safari
   cannot share a tab's audio.
 
+### Get whisper.cpp from the Plugin Page
+
+Open scribe's Plugin Page, press **Settings**, and press **Fetch
+whisper.cpp** under the whisper.cpp executable. scribe fetches the whisper.cpp
+v1.9.4 build for this system from whisper.cpp's GitHub releases (about 10 MB),
+checks its SHA-256, unpacks it into `downloads/` in its own Plugin directory,
+and sets the whisper.cpp executable to it. Then choose a model under the
+whisper.cpp model and press **Fetch model**. Models come from
+[`ggerganov/whisper.cpp`](https://huggingface.co/ggerganov/whisper.cpp) on
+Hugging Face; `ggml-small.bin` is 488 MB. Each is fetched on its own, and only
+when you press its button: nothing is fetched at `firstmate install`.
+
+The Page shows how far a download got. A download that fails, or whose SHA-256
+is not the one scribe knows, is said in one sentence under its button, and
+nothing of it is kept. The SHA-256 of every build and model is pinned in
+`src/downloads.json` (ADR-0005).
+
+The Linux builds are the ones whisper.cpp makes on Ubuntu: they need glibc
+2.34 or newer and `libgomp.so.1`, which `gcc` brings. Where whisper.cpp
+publishes no build for the system, such as macOS, the Page says so and how to
+build one; build it as below and give its path.
+
 ### Build whisper.cpp
 
-It needs `git`, `cmake` and a C++ compiler (`sudo apt install git cmake
+To build it yourself, you need `git`, `cmake` and a C++ compiler (`sudo apt install git cmake
 build-essential` on Debian). Build it somewhere outside this repository:
 
 ```sh
@@ -96,6 +120,8 @@ These are set in the environment alone:
 | `SCRIBE_MINUTES_TIMEOUT_MS` | How long the Minutes command may run before it is ended. Default 900000 (15 minutes). |
 | `SCRIBE_CUT_AFTER_MS`    | How long a Call may go without audio before it is Cut. Default 60000. |
 | `SCRIBE_WORKLOG_WAIT_MS` | How long scribe waits for Worklog to answer. Default 30000. |
+| `SCRIBE_FETCH_IDLE_MS`   | How long a download may send nothing before it is given up. Default 60000. |
+| `SCRIBE_DOWNLOADS`       | A list of downloads read in place of `src/downloads.json`. Tests point it at a server of their own; an operator has no reason to set it. |
 | `SCRIBE_NODE`            | The Node 24 that `mcp` runs in a `wsl` Place, when `PATH` has none. |
 
 One of the times that is not a whole number stops the Plugin Server at start

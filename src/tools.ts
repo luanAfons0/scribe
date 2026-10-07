@@ -20,6 +20,7 @@ import {
   saveMinutes,
   viewOf,
 } from './calls.ts';
+import type { Fetcher } from './fetcher.ts';
 import { badInput } from './mcp.ts';
 import type { Tool, ToolResult } from './mcp.ts';
 import type { MinutesMaker } from './minutes-maker.ts';
@@ -37,11 +38,12 @@ export type Parts = {
   readonly transcriber: Transcriber;
   readonly maker: MinutesMaker;
   readonly choices: Choices;
+  readonly fetcher: Fetcher;
 };
 
 /** The tools, over the parts of one running Plugin Server. */
 export function toolsFor(parts: Parts): readonly Tool[] {
-  const { store, recorder, transcriber, maker, choices } = parts;
+  const { store, recorder, transcriber, maker, choices, fetcher } = parts;
   const view = (id: number) => viewOf(store, id, transcriber.busyWith(id));
 
   return [
@@ -253,6 +255,53 @@ export function toolsFor(parts: Parts): readonly Tool[] {
       call: (given) => {
         choices.update(given);
         return told({ settings: choices.view() });
+      },
+    },
+
+    {
+      name: 'get_downloads',
+      description:
+        'What scribe can fetch for this system, and how far each download got. whisper: the ' +
+        'release, the build for this system (null when whisper.cpp publishes none, with ' +
+        'missing, the sentence that says how to get one) and fetch. models: the models ' +
+        'offered, each with its size in bytes, and fetch. A fetch is null when none runs, ' +
+        'or { name, received, size, failed }, where failed is null while it runs and the ' +
+        'one sentence it failed with after. Nothing is fetched by this tool.',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+      call: () => told({ downloads: fetcher.view() }),
+    },
+
+    {
+      name: 'fetch_whisper',
+      description:
+        'Fetch the whisper.cpp build for this system, check it against its SHA-256, unpack it ' +
+        'under downloads/ in the Plugin directory, and set whisper to it. It starts the ' +
+        'download and answers what get_downloads answers at once. It is refused where ' +
+        'whisper.cpp publishes no build for this system, and while one is being fetched.',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+      call: () => {
+        fetcher.fetchWhisper();
+        return told({ downloads: fetcher.view() });
+      },
+    },
+
+    {
+      name: 'fetch_model',
+      description:
+        'Fetch one whisper.cpp model of those get_downloads offers, check it against its ' +
+        'SHA-256, keep it under downloads/ in the Plugin directory, and set whisperModel to ' +
+        'it. It starts the download and answers what get_downloads answers at once. It is ' +
+        'refused while a model is being fetched.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'The model, such as ggml-small.bin.' },
+        },
+        required: ['name'],
+      },
+      call: (given) => {
+        fetcher.fetchModel(given['name']);
+        return told({ downloads: fetcher.view() });
       },
     },
   ];
