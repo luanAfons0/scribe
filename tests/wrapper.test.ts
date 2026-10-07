@@ -10,12 +10,18 @@ import { strict as assert } from 'node:assert';
 import test from 'node:test';
 import { makeDirectory, startPluginServer } from './helpers/plugin.ts';
 
+/** `mcp` is `sh`, which Windows has no use for: the Host runs `mcp.ts` there. */
+const NO_SH = {
+  skip: process.platform === 'win32' ? 'the sh wrapper `mcp` is for a wsl Place' : false,
+};
+
 /** The PATH a systemd user service gets: no nvm, no login shell. */
 const SERVICE_PATH = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
 
-test('the wrapper runs the Node that SCRIBE_NODE names when PATH has none new enough', async (t) => {
+test('the wrapper runs the Node that SCRIBE_NODE names when PATH has none new enough', NO_SH, async (t) => {
   const home = await makeDirectory(t);
   const plugin = await startPluginServer(t, {
+    wrapper: true,
     env: { PATH: SERVICE_PATH, HOME: home, SCRIBE_NODE: process.execPath },
   });
 
@@ -24,9 +30,10 @@ test('the wrapper runs the Node that SCRIBE_NODE names when PATH has none new en
   assert.equal(answer.error, undefined, plugin.output());
 });
 
-test('with no Node 24 anywhere, the wrapper says so in one sentence that names SCRIBE_NODE', async (t) => {
+test('with no Node 24 anywhere, the wrapper says so in one sentence that names SCRIBE_NODE', NO_SH, async (t) => {
   const home = await makeDirectory(t);
   const plugin = await startPluginServer(t, {
+    wrapper: true,
     env: { PATH: SERVICE_PATH, HOME: home, SCRIBE_NODE: '' },
   });
 

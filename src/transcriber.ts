@@ -8,9 +8,9 @@
  * ones measured: Portuguese, greedy decoding. A window's file is deleted as
  * soon as Whisper has read it, whether it heard anything or not.
  */
-import { execFile } from 'node:child_process';
 import { forget, spokenBetween, type Window } from './audio.ts';
 import { sentenceFor } from './mcp.ts';
+import { run } from './run.ts';
 import type { Settings } from './settings.ts';
 import { within, type Store } from './store.ts';
 
@@ -111,21 +111,18 @@ function hear(settings: Settings, window: Window): Promise<readonly Heard[]> {
     '-sns',
     '-f', window.path,
   ];
-  return new Promise((done, fail) => {
-    execFile(
-      settings.whisper,
-      args,
-      { timeout: WHISPER_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 },
-      (fault, stdout, stderr) => {
-        if (fault !== null) {
-          const said = stderr.trim().split('\n').pop() ?? '';
-          fail(new Error(said === '' ? fault.message : said));
-          return;
-        }
-        done(parse(stdout));
-      },
-    );
-  });
+  return run({ program: settings.whisper, args }, { timeoutMs: WHISPER_TIMEOUT_MS }).then(
+    (ran) => {
+      if (ran.timedOut) {
+        throw new Error(`whisper.cpp ran longer than ${WHISPER_TIMEOUT_MS / 60_000} minutes.`);
+      }
+      if (ran.code !== 0) {
+        const said = ran.stderr.trim().split('\n').pop() ?? '';
+        throw new Error(said === '' ? `whisper.cpp exited with ${ran.code}.` : said);
+      }
+      return parse(ran.stdout);
+    },
+  );
 }
 
 function parse(stdout: string): readonly Heard[] {

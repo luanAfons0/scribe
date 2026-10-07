@@ -3,29 +3,19 @@
  * given to the command in `SCRIBE_MINUTES_COMMAND` on stdin, and the Minutes
  * read from its stdout (ADR-0002).
  *
- * scribe knows no model. The command is run by `sh`, so it may carry its own
- * arguments — `ollama run <model>` — and anything that reads a prompt and
- * prints text will do. The first line of the answer is a proposed title;
+ * scribe knows no model. The command is a program and its arguments, run with
+ * no shell (ADR-0003) — `["ollama", "run", "<model>"]` — and anything that
+ * reads a prompt and prints text will do. The first line of the answer is a proposed title;
  * the rest is the Minutes, as Markdown, and then the Topics in a `<topics>`
  * block, which is taken out so that the Minutes keep their shape. A model
  * that thinks out loud in a `<think>` block, or wraps its answer in a code
  * fence, is forgiven both; one that writes no Topics still gives Minutes.
  */
-import { spawn } from 'node:child_process';
-import { accessSync, constants } from 'node:fs';
-import { delimiter, join } from 'node:path';
 import type { CallView } from './calls.ts';
-import { badInput } from './mcp.ts';
+import { COMMAND_FORM, commandFrom, findProgram, type Command } from './command.ts';
+import { badInput, sentenceFor } from './mcp.ts';
+import { run } from './run.ts';
 import { MINUTES_VARIABLE } from './settings.ts';
-
-/** A model on a CPU may take this long before the command is given up on. */
-const MINUTES_TIMEOUT_MS = 15 * 60_000;
-
-/**
- * Words `sh` runs itself. A command that starts with one — `cd /var/tmp && …`
- * — has no program to look for on the PATH, so it is left to `sh` to run.
- */
-const SHELL_WORDS: ReadonlySet<string> = new Set(['cd', 'exec', 'export', 'env', 'command', '.']);
 
 /** The most lines of Topics kept: few enough to read on a Worklog card. */
 const MOST_TOPICS_LINES = 20;
@@ -79,74 +69,62 @@ function stamp(ms: number): string {
 }
 
 /**
- * The command, when it is set and can be found; otherwise a sentence that
- * names `SCRIBE_MINUTES_COMMAND` and says what to set it to.
+ * The command, read and found, with its program as the path it is run by;
+ * otherwise a sentence that names `SCRIBE_MINUTES_COMMAND` and says what to
+ * set it to.
  */
-export function checkCommand(command: string | null, path = process.env['PATH'] ?? ''): string {
-  if (command === null) {
+export function checkCommand(text: string | null, env = process.env): Command {
+  if (text === null) {
     throw badInput(
       `make_minutes needs ${MINUTES_VARIABLE}: set it, where the Host is started, to a ` +
-        'command that reads a prompt on stdin and prints the Minutes, such as ' +
-        '"ollama run <model>". The README says more. Recording and the Transcript work ' +
-        'without it.',
+        'command that reads a prompt on stdin and prints the Minutes, written as a JSON ' +
+        `array of strings such as ${COMMAND_FORM}. The README says more. Recording and ` +
+        'the Transcript work without it.',
     );
   }
-  const program = command.split(/\s+/)[0] ?? '';
-  if (SHELL_WORDS.has(program)) return command;
-  const candidates = program.includes('/')
-    ? [program]
-    : path.split(delimiter).filter((dir) => dir !== '').map((dir) => join(dir, program));
-  for (const candidate of candidates) {
-    try {
-      accessSync(candidate, constants.X_OK);
-      return command;
-    } catch {
-      // Not this one; try the next directory.
-    }
+  let command: Command;
+  try {
+    command = commandFrom(text, MINUTES_VARIABLE);
+  } catch (fault) {
+    throw badInput(sentenceFor(fault));
   }
-  throw badInput(
-    `${MINUTES_VARIABLE} names "${program}", which is not found on the Host's PATH. ` +
-      'Give its absolute path: a command installed through nvm is not on the PATH of the ' +
-      'Host service.',
-  );
+  const program = findProgram(command.program, env);
+  if (program === null) {
+    throw badInput(
+      `${MINUTES_VARIABLE} names "${command.program}", which is not found on the Host's ` +
+        'PATH. Give its absolute path: a command installed through nvm is not on the PATH ' +
+        'of the Host service.',
+    );
+  }
+  return { program, args: command.args };
 }
 
 /** Run the command on this prompt, and read the Minutes it prints. */
-export function makeMinutes(command: string, prompt: string): Promise<Made> {
-  return new Promise((done, fail) => {
-    const child = spawn('/bin/sh', ['-c', command], { stdio: ['pipe', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
-    const timer = setTimeout(() => child.kill('SIGKILL'), MINUTES_TIMEOUT_MS);
-    child.stdout.setEncoding('utf8').on('data', (chunk: string) => (stdout += chunk));
-    child.stderr.setEncoding('utf8').on('data', (chunk: string) => (stderr += chunk));
-    child.stdin.on('error', () => {});
-    child.on('error', (fault) => {
-      clearTimeout(timer);
-      fail(fault);
-    });
-    child.on('close', (code, signal) => {
-      clearTimeout(timer);
-      if (signal === 'SIGKILL') {
-        const minutes = MINUTES_TIMEOUT_MS / 60_000;
-        fail(new Error(`The Minutes command ran for ${minutes} minutes and was stopped.`));
-        return;
-      }
-      if (code !== 0) {
-        const said = stderr.trim().split('\n').pop() ?? '';
-        const why = said === '' ? '.' : `: ${said}`;
-        fail(new Error(`The Minutes command exited with ${code}${why}`));
-        return;
-      }
-      const made = readAnswer(stdout);
-      if (made.minutes === '') {
-        fail(new Error('The Minutes command printed no Minutes.'));
-        return;
-      }
-      done(made);
-    });
-    child.stdin.end(prompt);
-  });
+export async function makeMinutes(
+  command: Command,
+  prompt: string,
+  timeoutMs: number,
+): Promise<Made> {
+  const ran = await run(command, { input: prompt, timeoutMs });
+  if (ran.timedOut) {
+    throw new Error(
+      `The Minutes command ran longer than ${duration(timeoutMs)} and was stopped, with ` +
+        'every process it started.',
+    );
+  }
+  if (ran.code !== 0) {
+    const said = ran.stderr.trim().split('\n').pop() ?? '';
+    const why = said === '' ? '.' : `: ${said}`;
+    throw new Error(`The Minutes command exited with ${ran.code}${why}`);
+  }
+  const made = readAnswer(ran.stdout);
+  if (made.minutes === '') throw new Error('The Minutes command printed no Minutes.');
+  return made;
+}
+
+/** A time a person reads: whole minutes when it is, seconds otherwise. */
+function duration(ms: number): string {
+  return ms % 60_000 === 0 ? `${ms / 60_000} minutes` : `${ms / 1000} s`;
 }
 
 /** The title, the Minutes and the Topics out of what the command printed. */

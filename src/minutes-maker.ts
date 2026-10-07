@@ -16,6 +16,7 @@ import {
   viewOf,
   type CallView,
 } from './calls.ts';
+import type { Command } from './command.ts';
 import { badInput, sentenceFor } from './mcp.ts';
 import { checkCommand, makeMinutes, promptFor } from './minutes.ts';
 import type { Settings } from './settings.ts';
@@ -32,15 +33,15 @@ export type MinutesMaker = {
 /** The MinutesMaker, over one Store, asking whether Whisper is done. */
 export function minutesMakerFor(
   store: Store,
-  settings: Pick<Settings, 'minutesCommand'>,
+  settings: Pick<Settings, 'minutesCommand' | 'minutesTimeoutMs'>,
   busyWith: (id: number) => boolean,
   made: (id: number) => void,
 ): MinutesMaker {
   within(store, () => forgetUnfinishedMinutes(store));
 
-  const begin = (command: string, call: CallView): void => {
+  const begin = (command: Command, call: CallView): void => {
     within(store, () => setMinutesState(store, call.id, 'making'));
-    makeMinutes(command, promptFor(call))
+    makeMinutes(command, promptFor(call), settings.minutesTimeoutMs)
       .then((answer) => within(store, () => keepMinutes(store, call.id, answer)))
       .then(() => made(call.id))
       .catch((fault: unknown) => {
@@ -84,7 +85,7 @@ export function minutesMakerFor(
       }
       if (call.state !== 'ended' || call.minutesState !== 'none') return;
       if (settings.minutesCommand === null) return;
-      let command: string;
+      let command: Command;
       try {
         command = checkCommand(settings.minutesCommand);
       } catch (fault) {

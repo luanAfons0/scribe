@@ -5,12 +5,31 @@
  */
 import { strict as assert } from 'node:assert';
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import test from 'node:test';
 import { getCall, pcm, send, startCall, transcribed, until } from './helpers/audio.ts';
-import { FIXTURES, makeDirectory, startedAndShaken, type Started } from './helpers/plugin.ts';
+import {
+  FIXTURES,
+  makeDirectory,
+  minutesCommand,
+  startedAndShaken,
+  type Started,
+} from './helpers/plugin.ts';
 
-const COMMAND = join(FIXTURES, 'minutes');
+const COMMAND = minutesCommand();
+
+/** Whether a process has ended, within a few seconds. */
+async function gone(pid: number): Promise<boolean> {
+  for (let tries = 0; tries < 50; tries += 1) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return true;
+    }
+    await new Promise((later) => setTimeout(later, 100));
+  }
+  return false;
+}
 
 /** A Call with Jottings and a line on each track, stopped. */
 async function stoppedCall(plugin: Started): Promise<number> {
@@ -69,7 +88,7 @@ test('with no command set, Make Minutes is refused with a sentence and the Trans
 
 test('a command that is not found is refused with a sentence that names the setting', async (t) => {
   const plugin = await startedAndShaken(t, {
-    env: { SCRIBE_MINUTES_COMMAND: 'no-such-model-runner --fast' },
+    env: { SCRIBE_MINUTES_COMMAND: '["no-such-model-runner", "--fast"]' },
   });
   const id = await stoppedCall(plugin);
   const call = await until(plugin, id, (seen) => seen.minutesState === 'failed');
@@ -82,9 +101,39 @@ test('a command that is not found is refused with a sentence that names the sett
   assert.equal(call.transcript.length, 2);
 });
 
-test('a command that starts with a word sh runs itself is run by sh', async (t) => {
+test('every argument reaches the Minutes command as it was written, with no shell', async (t) => {
+  const log = join(await makeDirectory(t), 'args.json');
+  const args = [
+    '--model',
+    'two words',
+    'say "hi"',
+    'C:\\dir\\',
+    '50% & <more> | ^done',
+    '%PATH%',
+  ];
   const plugin = await startedAndShaken(t, {
-    env: { SCRIBE_MINUTES_COMMAND: `cd /tmp && exec ${COMMAND}` },
+    env: { SCRIBE_MINUTES_COMMAND: minutesCommand(...args), SCRIBE_TEST_ARGS_LOG: log },
+  });
+  const id = await stoppedCall(plugin);
+
+  const call = await until(
+    plugin,
+    id,
+    (seen) => seen.minutesState !== 'none' && seen.minutesState !== 'making',
+  );
+
+  assert.equal(call.minutesState, 'made', call.minutesError ?? '');
+  assert.deepEqual(JSON.parse(await readFile(log, 'utf8')), args);
+});
+
+test('a program named with no directory is found on the PATH, as name.cmd on Windows', async (t) => {
+  // Windows spells it Path, and an environment with both would be two variables.
+  const key = Object.keys(process.env).find((name) => name.toUpperCase() === 'PATH') ?? 'PATH';
+  const plugin = await startedAndShaken(t, {
+    env: {
+      SCRIBE_MINUTES_COMMAND: '["minutes"]',
+      [key]: `${FIXTURES}${delimiter}${process.env[key] ?? ''}`,
+    },
   });
   const id = await stoppedCall(plugin);
 
@@ -97,6 +146,21 @@ test('a command that starts with a word sh runs itself is run by sh', async (t) 
   assert.equal(call.minutesState, 'made', call.minutesError ?? '');
 });
 
+test('a command not written as a list of strings is refused with a sentence that says the form', async (t) => {
+  const plugin = await startedAndShaken(t, {
+    env: { SCRIBE_MINUTES_COMMAND: 'ollama run llama3' },
+  });
+  const id = await stoppedCall(plugin);
+  const call = await until(plugin, id, (seen) => seen.minutesState === 'failed');
+
+  const answer = await plugin.call('make_minutes', { id });
+
+  assert.equal(answer.error?.code, -32602);
+  assert.ok(answer.error?.message.includes('SCRIBE_MINUTES_COMMAND'), answer.error?.message);
+  assert.ok(answer.error?.message.includes('["ollama","run","<model>"]'), answer.error?.message);
+  assert.equal(call.transcript.length, 2);
+});
+
 test('a command that fails leaves the Minutes failed, with what it said', async (t) => {
   const plugin = await startedAndShaken(t, {
     env: { SCRIBE_MINUTES_COMMAND: COMMAND, SCRIBE_TEST_MINUTES_FAIL: '1' },
@@ -107,6 +171,25 @@ test('a command that fails leaves the Minutes failed, with what it said', async 
 
   assert.ok(call.minutesError?.includes('model "nada" not found'), call.minutesError ?? '');
   assert.equal(call.minutes, null);
+});
+
+test('a command that runs past its time is ended with every process it started', async (t) => {
+  const pidFile = join(await makeDirectory(t), 'started.pid');
+  const plugin = await startedAndShaken(t, {
+    env: {
+      SCRIBE_MINUTES_COMMAND: COMMAND,
+      SCRIBE_MINUTES_TIMEOUT_MS: '1500',
+      SCRIBE_TEST_MINUTES_HANG: pidFile,
+    },
+  });
+  const id = await stoppedCall(plugin);
+
+  const call = await until(plugin, id, (seen) => seen.minutesState === 'failed');
+
+  assert.ok(call.minutesError?.includes('1.5 s'), call.minutesError ?? '');
+  assert.ok(call.minutesError?.includes('stopped'), call.minutesError ?? '');
+  const started = Number(await readFile(pidFile, 'utf8'));
+  assert.ok(await gone(started), `process ${started}, which the command started, still runs`);
 });
 
 test('Minutes are made again on a Cut Call', async (t) => {

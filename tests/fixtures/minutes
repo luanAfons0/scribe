@@ -3,14 +3,33 @@
 // would, keeps a copy where SCRIBE_TEST_PROMPT_LOG says, and prints a title
 // and fixed Minutes, then fixed Topics. With SCRIBE_TEST_MINUTES_FAIL set, it
 // fails the way a command with no model does: a sentence on stderr and a
-// non-zero exit. SCRIBE_TEST_TOPICS=none leaves the Topics out, the way a
+// non-zero exit. With SCRIBE_TEST_ARGS_LOG set, it writes the arguments it was
+// given there, as JSON, so a test can see that none was changed on the way.
+// With SCRIBE_TEST_MINUTES_HANG set to a file, it starts a process of its own
+// that holds its pipes, writes that process's id to the file, and never
+// answers, the way a model that hangs does.
+// SCRIBE_TEST_TOPICS=none leaves the Topics out, the way a
 // model that forgets a rule does; SCRIBE_TEST_TOPICS=long writes 25 lines.
+import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
+
+if (process.env.SCRIBE_TEST_ARGS_LOG) {
+  writeFileSync(process.env.SCRIBE_TEST_ARGS_LOG, JSON.stringify(process.argv.slice(2)));
+}
+
+if (process.env.SCRIBE_TEST_MINUTES_HANG) {
+  const started = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+    stdio: 'inherit',
+  });
+  writeFileSync(process.env.SCRIBE_TEST_MINUTES_HANG, String(started.pid));
+  setInterval(() => {}, 1000);
+}
 
 let prompt = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => (prompt += chunk));
 process.stdin.on('end', () => {
+  if (process.env.SCRIBE_TEST_MINUTES_HANG) return;
   if (process.env.SCRIBE_TEST_PROMPT_LOG) writeFileSync(process.env.SCRIBE_TEST_PROMPT_LOG, prompt);
   if (process.env.SCRIBE_TEST_MINUTES_FAIL) {
     process.stderr.write('pulling manifest\nError: model "nada" not found\n');

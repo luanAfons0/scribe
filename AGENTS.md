@@ -28,7 +28,8 @@ Run every command from the repository root.
 | `node --test tests/settings.test.ts` | One test file, while you work on it.          |
 | `npm install && npx tsc --noEmit`    | Check the types. `npm run typecheck` is the same. |
 | `npm run check`                      | The types, then every test. CI runs it.       |
-| `./mcp`                              | The Plugin Server, as the Host runs it.       |
+| `node mcp.ts`                        | The Plugin Server, as the Host runs it.       |
+| `./mcp`                              | The same, as the Host runs it in a `wsl` Place. |
 
 The environment variables are in the README's Settings table. Tests set every
 one of them through `tests/helpers/plugin.ts`.
@@ -46,16 +47,24 @@ one of them through `tests/helpers/plugin.ts`.
   (`src/mcp.ts`); the data is `node:sqlite`.
 - **whisper.cpp** is an executable the operator builds, named by
   `SCRIBE_WHISPER`. scribe runs it; it does not ship it.
+- **Windows and Linux**, both, as the FirstMate App runs on both (FirstMate
+  ADR-0028). No source file runs a shell: whisper.cpp and the Minutes command
+  are a program and its arguments (ADR-0003). CI runs every test on both.
 - **The Page** is plain HTML, CSS and JavaScript in `web/`, served by the Host
   byte for byte (FirstMate ADR-0008). No framework, no web font, no CDN.
 
 ## Project structure
 
 ```
-mcp            the executable the Host runs: find a Node 24, run src/main.ts.
+mcp.ts         the entry point the Host runs with its own Node, on every system.
+mcp            the sh wrapper for a wsl Place: find a Node 24, run src/main.ts.
 src/           the Plugin Server. Every file is one job.
   main.ts      start-up: read the settings, open scribe.db, serve the tools.
   settings.ts  the environment: whisper.cpp, its model, the Minutes command.
+  command.ts   a command's form, a JSON array of program and arguments, read
+               in one place; and its program, found on the PATH.
+  run.ts       run a program with no shell, on Windows and Linux, and end its
+               whole tree when it runs past its time (ADR-0003).
   store.ts     scribe.db: open it, move it up to the current schema version.
   calls.ts     a Call: its rows, its state, and what the tools answer of it.
   audio.ts     chunk files in audio/, joined into windows cut at silence.
@@ -80,7 +89,8 @@ web/           the Plugin Page, as the Host serves it.
   pcm-tap.js   the AudioWorklet that cuts a track into 16-bit PCM chunks.
   app.css      the one stylesheet.
 tests/         one file per behaviour, plus helpers/ and fixtures/.
-  fixtures/    whisper and minutes, fixture executables, and model.bin.
+  fixtures/    whisper and minutes, fixture executables, each with its Windows
+               form beside it (whisper.cmd, minutes.cmd), and model.bin.
 docs/adr/      the decisions that are expensive to reverse.
 docs/agents/   how an agent works in this repo. See "Agent skills" below.
 ```
@@ -109,13 +119,18 @@ ignores both.
 
 `node --test`. There are two seams, and no test imports a module of `src/`.
 
-- **The Plugin Server**: `tests/helpers/plugin.ts` spawns the real `mcp`
-  against a temporary Plugin directory and speaks to it exactly as the Host
-  does. A test sees what the Host sees: JSON-RPC lines on stdout,
+- **The Plugin Server**: `tests/helpers/plugin.ts` starts the real `mcp.ts`
+  with the running Node and no shell, as the Host does, against a temporary
+  Plugin directory, and speaks to it exactly as the Host does. A test asks
+  for the `sh` wrapper `mcp` with `wrapper: true`. A test sees what the Host sees: JSON-RPC lines on stdout,
   diagnostics on stderr, the exit code, and the files in the directory.
 - **whisper.cpp and the Minutes command are fixture executables** in
   `tests/fixtures/`, reached through `SCRIBE_WHISPER` and
-  `SCRIBE_MINUTES_COMMAND`. Add a fixture rather than a mock.
+  `SCRIBE_MINUTES_COMMAND`. Add a fixture rather than a mock, with its
+  Windows form, a `.cmd` that hands it to `node`; `fixture(name)` picks the
+  one this system runs.
+- The suite runs on Linux and on Windows. A test that only makes sense on one
+  skips on the other and says why, as `wrapper.test.ts` does.
 - **The Page as bytes**: `tests/page.test.ts` reads `web/` off disk, because
   no test drives a browser. Recording needs a human click in Chrome's picker,
   so it is checked by hand.
