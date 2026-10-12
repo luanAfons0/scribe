@@ -29,3 +29,15 @@ and the Call is Cut rather than lost.
 The Jottings and Stop are on the Call's page, in the same tab. A first
 version also had them in a Popup, and the operator took it out as more than
 was needed.
+
+## Amended: the Popup comes back
+
+The Jottings and Stop are also in the Popup again, opened by a Shortcut the
+operator binds to `jot.html`. The operator took the first one out as more than
+was needed, and asked for it back to write during a call without leaving it.
+The Popup still never records: it shows the Jottings of the Call a tab
+records, and with none, it says so and says to start one in scribe's tab. It
+offers no link there: a Plugin Page in the Popup that goes to its own Host only
+hides the Popup, and FirstMate gives it no way to a browser.
+It unloads each time it hides, which loses nothing, because every change to
+the Jottings is kept at once.

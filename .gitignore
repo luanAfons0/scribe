@@ -21,3 +21,6 @@ settings.json.next
 # whisper.cpp and the models fetched from the Plugin Page, and a download that
 # is not yet checked.
 downloads/
+
+# The approved design mocks. They are published, and they are not source.
+.impeccable/
