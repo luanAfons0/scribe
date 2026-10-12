@@ -111,7 +111,12 @@ web/           the Plugin Page, as the Host serves it.
                and what its last read gave.
   downloads.js the offers to fetch whisper.cpp and a model, and how far each
                download got.
-  jottings.js  keepJottings(): the box that keeps every change at once.
+  jottings.js  keepJottings(): the box that keeps every change at once, and
+               takes the text the Popup saved.
+  jot.html     the Popup a Shortcut opens: the Jottings of the Call that
+               records, and Stop. It never records (ADR-0001).
+  jot.js       draws jot.html. jot.css is its look, on top of app.css.
+  shortcut.js  the Settings view's firstmate bind command line, and Copy.
   markdown.js  the small Markdown renderer for the Minutes, as Worklog's.
   capture.js   startCapture(): the tab and the mic, sent in chunks (ADR-0001).
   pcm-tap.js   the AudioWorklet that cuts a track into 16-bit PCM chunks.

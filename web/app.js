@@ -138,6 +138,7 @@ async function showList() {
 
 /** One Call, drawn whole. Answers whether it is still changing. */
 async function showCall(id) {
+  const mark = jottings.mark();
   const found = (await call('get_call', { id: id })).call;
   callTitle.textContent = nameOf(found);
   callMeta.textContent =
@@ -147,7 +148,7 @@ async function showCall(id) {
   deleteButton.hidden = found.state === 'recording';
   callView.dataset.title = found.title || '';
   cutNote.hidden = found.state !== 'cut';
-  jottings.show(found.id, found.jottings);
+  jottings.show(found.id, found.jottings, mark);
 
   const whole = wholeTranscript.has(found.id) || found.transcript.length <= LAST_LINES;
   const hidden = whole ? 0 : found.transcript.length - LAST_LINES;
@@ -227,7 +228,7 @@ async function showTopics(found) {
   topicsPart.hidden = found.topics === null || found.state === 'recording';
   if (topicsPart.hidden) return;
   topicsText.textContent = found.topics;
-  worklogState.classList.remove('fault');
+  worklogState.classList.remove('fault', 'changed');
   sendButton.disabled = false;
   sendButton.classList.add('go');
   sendButton.textContent = found.sentToWorklogAt === null ? 'Send to Worklog' : 'Send again';
@@ -246,6 +247,11 @@ async function showTopics(found) {
   } else if (found.entryError !== null) {
     worklogState.textContent = found.entryError;
     worklogState.classList.add('fault');
+  } else if (found.topicsChangedSinceSent) {
+    // Worklog holds the Topics as they were: Send again stays the main act.
+    worklogState.textContent =
+      'The Topics changed since you sent them at ' + when(found.sentToWorklogAt) + '.';
+    worklogState.classList.add('changed');
   } else if (found.sentToWorklogAt !== null) {
     worklogState.textContent =
       'Sent to Worklog ' + when(found.sentToWorklogAt) + ', as one Done Entry.';
@@ -433,4 +439,6 @@ sendButton.addEventListener('click', sendToWorklog);
 stopButton.addEventListener('click', () => stop(shownId()));
 liveStop.addEventListener('click', () => stop(Number(live.dataset.id)));
 window.addEventListener('hashchange', show);
+// The Popup may have changed the Jottings while this tab had no focus.
+window.addEventListener('focus', show);
 show();

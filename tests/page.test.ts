@@ -22,6 +22,8 @@ const PAGES = [
   { page: 'index.html', script: 'settings.js' },
   { page: 'index.html', script: 'downloads.js' },
   { page: 'index.html', script: 'calendar.js' },
+  { page: 'index.html', script: 'shortcut.js' },
+  { page: 'jot.html', script: 'jot.js' },
 ];
 
 /** Every `href` and `src` the page names, in the order it names them. */
@@ -267,4 +269,95 @@ test('calendar.js never puts the address back on the Page', async () => {
   assert.match(code, /field\.value = '';/);
   assert.match(code, /call\('update_settings', \{ calendarUrl: null \}\)/);
   assert.match(code, /call\('list_events'\)/);
+});
+
+test('app.js says the Topics changed since sent, and offers Send again as the main act', async () => {
+  const code = await readFile(join(WEB, 'app.js'), 'utf8');
+  const css = await readFile(join(WEB, 'app.css'), 'utf8');
+
+  assert.match(
+    code,
+    /found\.topicsChangedSinceSent\)[\s\S]*?'The Topics changed since you sent them at '[\s\S]*?classList\.add\('changed'\)/,
+  );
+  assert.match(css, /\.worklog-state\.changed \{[^}]*color: var\(--cut\)/);
+});
+
+test('the Popup is jot.html, in the look of the Page, light and dark', async () => {
+  const html = await readFile(join(WEB, 'jot.html'), 'utf8');
+  const css = await readFile(join(WEB, 'app.css'), 'utf8');
+
+  assert.match(html, /<meta name="color-scheme" content="light dark">/);
+  const paths = pathsIn(html);
+  assert.ok(paths.includes('app.css'), 'jot.html does not share app.css');
+  assert.match(css, /@media \(prefers-color-scheme: dark\)/);
+});
+
+test('the Popup shows the Jottings of the Call that records, and keeps every change', async () => {
+  const html = await readFile(join(WEB, 'jot.html'), 'utf8');
+  const code = await readFile(join(WEB, 'jot.js'), 'utf8');
+
+  assert.match(html, /<textarea[^>]*id="jot-jottings"/);
+  // Without an id, get_call answers the Call that records, or null.
+  assert.match(code, /call\('get_call'\)/);
+  // The same box the Call's page keeps: every change is saved with save_jottings.
+  assert.ok(pathsIn(html).includes('jottings.js'), 'jot.html does not load jottings.js');
+  assert.match(code, /keepJottings\(/);
+});
+
+test('Stop in the Popup stops the Call with stop_call, and only from its click', async () => {
+  const html = await readFile(join(WEB, 'jot.html'), 'utf8');
+  const code = await readFile(join(WEB, 'jot.js'), 'utf8');
+
+  assert.match(html, /<button[^>]*id="jot-stop"[^>]*type="button"[^>]*>Stop<\/button>/);
+  assert.equal(code.split("call('stop_call'").length, 2, 'stop_call is called more than once');
+  assert.match(code, /stopButton\.addEventListener\('click'/);
+});
+
+test('with no Call recording, the Popup says so, with no button and no link', async () => {
+  const html = await readFile(join(WEB, 'jot.html'), 'utf8');
+
+  const empty = /<div class="pop-empty" id="jot-empty"[^>]*>([\s\S]*?)<\/div>/.exec(html);
+  assert.ok(empty, 'jot.html has no empty state');
+  assert.match(empty[1] ?? '', /No Call is recording/);
+  assert.match(empty[1] ?? '', /scribe’s browser tab/);
+  // In the Popup, a link to the Host only hides it (FirstMate's popup.ts).
+  assert.ok(!/<(?:button|a)\b/.test(empty[1] ?? ''), 'the empty state offers a way out');
+});
+
+test('the Popup never records (ADR-0001)', async () => {
+  const html = await readFile(join(WEB, 'jot.html'), 'utf8');
+  const code = await readFile(join(WEB, 'jot.js'), 'utf8');
+
+  assert.ok(!pathsIn(html).includes('capture.js'), 'jot.html loads the capture');
+  assert.ok(!/getDisplayMedia|getUserMedia|startCapture|start_call/.test(code));
+});
+
+test("the Call's page reads the Jottings again when its tab gets focus", async () => {
+  const code = await readFile(join(WEB, 'app.js'), 'utf8');
+
+  assert.match(code, /window\.addEventListener\('focus', show\)/);
+});
+
+test('a reread never writes an old copy over a save that was on its way', async () => {
+  const code = await readFile(join(WEB, 'jottings.js'), 'utf8');
+  const app = await readFile(join(WEB, 'app.js'), 'utf8');
+
+  // A read asked for before a save ended may hold the text before it.
+  assert.match(code, /mark\(\)/);
+  assert.match(app, /const mark = jottings\.mark\(\);[\s\S]*?jottings\.show\(found\.id, found\.jottings, mark\)/);
+});
+
+test('a small tool call outlives the page, so a Popup that hides keeps its last save', async () => {
+  const code = await readFile(join(WEB, 'rpc.js'), 'utf8');
+
+  assert.match(code, /keepalive: /);
+});
+
+test('Settings shows the firstmate bind command line for the Popup, with a copy button', async () => {
+  const html = await readFile(join(WEB, 'index.html'), 'utf8');
+  const code = await readFile(join(WEB, 'shortcut.js'), 'utf8');
+
+  assert.match(html, /<code id="bind-command">firstmate bind Ctrl\+Shift\+J scribe jot\.html<\/code>/);
+  assert.match(html, /<button[^>]*id="copy-bind"[^>]*type="button"/);
+  assert.match(code, /navigator\.clipboard\.writeText/);
 });

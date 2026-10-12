@@ -10,8 +10,10 @@
 // answers, the way a model that hangs does.
 // SCRIBE_TEST_TOPICS=none leaves the Topics out, the way a
 // model that forgets a rule does; SCRIBE_TEST_TOPICS=long writes 25 lines.
+// With SCRIBE_TEST_TOPICS_FILE set, the Topics are what that file holds at
+// the time of the run, so a test can make the Topics change between runs.
 import { spawn } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 if (process.env.SCRIBE_TEST_ARGS_LOG) {
   writeFileSync(process.env.SCRIBE_TEST_ARGS_LOG, JSON.stringify(process.argv.slice(2)));
@@ -36,8 +38,9 @@ process.stdin.on('end', () => {
     process.exit(3);
   }
   const lines = (prompt.match(/\] (Você|Outros): /g) || []).length;
-  const topics =
-    process.env.SCRIBE_TEST_TOPICS === 'none'
+  const topics = process.env.SCRIBE_TEST_TOPICS_FILE
+    ? `\n<topics>\n${readFileSync(process.env.SCRIBE_TEST_TOPICS_FILE, 'utf8')}\n</topics>\n`
+    : process.env.SCRIBE_TEST_TOPICS === 'none'
       ? ''
       : process.env.SCRIBE_TEST_TOPICS === 'long'
         ? `\n<topics>\n${Array.from({ length: 25 }, (_, i) => `- Tópico ${i + 1}`).join('\n')}\n</topics>\n`

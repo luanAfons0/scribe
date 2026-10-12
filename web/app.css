@@ -377,6 +377,34 @@ h3.section-label { margin-top: 24px; }
 .settings .acts { align-items: center; }
 .saved { color: var(--muted); }
 
+/* A key, as the Popup's foot and the Settings view name one. */
+kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+  font: 12px/1.4 var(--mono);
+}
+
+/* The Popup Shortcut: a command line to copy, after the settings to save. */
+.popup-shortcut { margin-top: 24px; }
+.popup-shortcut .setting-help { margin-top: 0; }
+.command { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+
+.command code {
+  flex: 1;
+  min-width: 14em;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  font: 14px/1.4 var(--mono);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
 /* An offer to fetch whisper.cpp or a model, under its setting. */
 .fetch { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 .fetch .setting-help { margin-top: 0; }
@@ -427,6 +455,7 @@ h3.section-label { margin-top: 24px; }
 }
 
 .worklog-state { margin: 0; font-size: 13px; color: var(--muted); }
+.worklog-state.changed { color: var(--cut); font-weight: 600; }
 .worklog-state.fault { color: var(--live); }
 .worklog-state a { color: var(--accent); font-weight: 600; }
 

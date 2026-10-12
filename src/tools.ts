@@ -163,7 +163,9 @@ export function toolsFor(parts: Parts): readonly Tool[] {
       description:
         'Make the Minutes of a Call again, from its Jottings and its Transcript, with the ' +
         'Minutes command in get_settings. It starts the work and answers the Call at once; ' +
-        'get_call shows minutesState "made", or "failed" with minutesError.',
+        'get_call shows minutesState "made", or "failed" with minutesError. It sends nothing ' +
+        'to Worklog: when it writes other Topics on a sent Call, get_call shows ' +
+        'topicsChangedSinceSent until send_to_worklog sends them again.',
       inputSchema: { type: 'object', properties: { id: ID }, required: ['id'] },
       call: (given) => {
         const id = checkCallId('make_minutes', given['id']);
