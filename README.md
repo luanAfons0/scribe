@@ -160,11 +160,19 @@ it, which turns Events off. Under it, Settings says when the calendar was
 last read and how many Events it holds, or why the read failed.
 
 scribe reads the address at start, every five minutes, and when you save it.
-It holds the Events in memory, never in `scribe.db`. An Event is an entry
+It holds the Events in memory, not in `scribe.db`. An Event is an entry
 with a Google Meet link, in its conference data or else in its description
 or location. scribe skips an entry that is all day, cancelled, or that you
 declined. The `list_events` tool gives the Events from now to the next day:
 the name, the start, the end and the Meet link of each, and nothing else.
+
+A Call you start from five minutes before an Event until it ends is for
+that Event. It takes the Event's name as its title, as if you gave it with
+**Rename**, so the Minutes do not replace it, and the Call's page says
+"Title from the Event". During two Events at once, the one that started
+last wins. The Call keeps only the Event's name and start, in `scribe.db`:
+never the address and never the Meet link. With no Event in reach, or no
+address, a Call starts with no title, as before.
 
 A Google Workspace admin can turn the secret address off. Then Settings says
 the address answered 404, there are no Events, and scribe records as before.
@@ -206,7 +214,8 @@ and reads the Minutes from its stdout. The rules ask for:
   each;
 - `Decisões` and `Próximos passos` at the end;
 - the language of the Call;
-- a title on the first line, which replaces the date and time in the list;
+- a title on the first line, which replaces the date and time in the list,
+  unless the Call has a title from its Event or from you;
 - the Topics after the Minutes: what the Call talked about and a short
   summary, at most 20 lines. scribe takes them out of the Minutes and keeps
   them apart, for Worklog. A command that leaves them out still gives

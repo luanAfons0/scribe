@@ -143,6 +143,14 @@ async function showCall(id) {
   callTitle.textContent = nameOf(found);
   callMeta.textContent =
     when(found.startedAt) + ' · ' + lengthOf(found) + ' · ' + STATE_WORDS[found.state];
+  // A title the Event gave is said to be the Event's, until the operator
+  // gives one of their own.
+  if (found.event !== null && found.title === found.event.name) {
+    const event = document.createElement('span');
+    event.className = 'from-event';
+    event.textContent = 'Event';
+    callMeta.append(' · Title from the ', event);
+  }
   callView.dataset.state = found.state;
   stopButton.hidden = found.state !== 'recording';
   deleteButton.hidden = found.state === 'recording';

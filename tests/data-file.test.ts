@@ -160,6 +160,42 @@ test('a Call an older scribe sent counts as changed only once its Topics change'
   assert.equal(plugin.output(), '');
 });
 
+test('a file from before Events keeps its Calls whole, each for no Event', async (t) => {
+  const directory = await makeDirectory(t);
+  const old = new DatabaseSync(join(directory, 'scribe.db'));
+  old.exec(VERSION_1);
+  old.exec('ALTER TABLE calls ADD COLUMN title_given INTEGER NOT NULL DEFAULT 0');
+  old.exec('ALTER TABLE calls ADD COLUMN topics TEXT');
+  old.exec('ALTER TABLE calls ADD COLUMN entry_id INTEGER');
+  old.exec('ALTER TABLE calls ADD COLUMN entry_error TEXT');
+  old.exec('ALTER TABLE calls ADD COLUMN entry_sent_at TEXT');
+  old.exec('ALTER TABLE calls ADD COLUMN topics_written_at TEXT');
+  old.exec(
+    "UPDATE calls SET title = 'Meu título', title_given = 1, minutes = '## Velhas', " +
+      "minutes_state = 'made', topics = '- Prazo', entry_id = 7, " +
+      "entry_sent_at = '2026-10-02T15:16:00.000Z', " +
+      "topics_written_at = '2026-10-02T15:10:00.000Z' WHERE id = 1",
+  );
+  old.exec('PRAGMA user_version = 6');
+  old.close();
+  const plugin = await startedAndShaken(t, { directory });
+
+  const call = (await getCall(plugin, 1)) as Awaited<ReturnType<typeof getCall>> & {
+    event: unknown;
+  };
+
+  assert.equal(call.title, 'Meu título');
+  assert.equal(call.event, null);
+  assert.equal(call.jottings, '# Prazo');
+  assert.equal(call.transcript.length, 1);
+  assert.equal(call.minutes, '## Velhas');
+  assert.equal(call.topics, '- Prazo');
+  assert.equal(call.entryId, 7);
+  assert.equal(call.sentToWorklogAt, '2026-10-02T15:16:00.000Z');
+  assert.equal(call.topicsChangedSinceSent, false);
+  assert.equal(plugin.output(), '');
+});
+
 test('a file at a schema newer than this scribe knows is refused with a sentence', async (t) => {
   const directory = await makeDirectory(t);
   const newer = new DatabaseSync(join(directory, 'scribe.db'));

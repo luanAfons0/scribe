@@ -145,6 +145,9 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* The word Event, where a Call's title is the Event's name. */
+.from-event { color: var(--accent); }
+
 .empty, .hint { color: var(--faint); }
 .hint { margin: 0 0 16px; font-size: 13px; }
 

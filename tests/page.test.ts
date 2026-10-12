@@ -361,3 +361,13 @@ test('Settings shows the firstmate bind command line for the Popup, with a copy 
   assert.match(html, /<button[^>]*id="copy-bind"[^>]*type="button"/);
   assert.match(code, /navigator\.clipboard\.writeText/);
 });
+
+test('a Call named after its Event says so on its meta line, with Event in the accent', async () => {
+  const code = await readFile(join(WEB, 'app.js'), 'utf8');
+  const css = await readFile(join(WEB, 'app.css'), 'utf8');
+
+  assert.match(code, /found\.event !== null && found\.title === found\.event\.name/);
+  assert.match(code, /className = 'from-event';\s*event\.textContent = 'Event';/);
+  assert.match(code, /callMeta\.append\(' · Title from the ', event\)/);
+  assert.match(css, /\.from-event \{[^}]*color: var\(--accent\)/);
+});

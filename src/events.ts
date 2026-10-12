@@ -14,7 +14,7 @@
  */
 import { every, first, readCalendar, textOf, whenOf, type Component } from './ical.ts';
 
-/** One Event, as scribe holds it in memory. Nothing of it is kept in scribe.db. */
+/** One Event, as scribe holds it in memory. A Call keeps only its name and start. */
 export type Event = {
   /** The UID of the entry it comes from: with the start, it names this Event. */
   readonly uid: string;
