@@ -75,8 +75,9 @@ src/           the Plugin Server. Every file is one job.
                pinned SHA-256, as data.
   fetcher.ts   fetch a build or a model when the Page asks, check it, keep it
                under downloads/, and set it.
-  unpack.ts    a zip or a tar.gz, unpacked inside one directory, by scribe's
-               own reader over node:zlib.
+  unpack.ts    a zip, a tar.gz or a tar.bz2, unpacked inside one directory, by
+               scribe's own reader over node:zlib and bzip2.ts.
+  bzip2.ts     scribe's own bzip2 decoder, as node:zlib has none (ADR-0007).
   command.ts   a command's form, a JSON array of program and arguments, read
                in one place; and its program, found on the PATH.
   run.ts       run a program with no shell, on Windows and Linux, and end its
@@ -112,8 +113,10 @@ web/           the Plugin Page, as the Host serves it.
 tests/         one file per behaviour, plus helpers/ and fixtures/.
   fixtures/    whisper and minutes, fixture executables, each with its Windows
                form beside it (whisper.cmd, minutes.cmd), and model.bin;
-               whisper-build.zip and .tar.gz, the fixture whisper packed as a
-               build; escape.zip and .tar.gz, builds that reach outside.
+               whisper-build.zip, .tar.gz and .tar.bz2, the fixture whisper
+               packed as a build; whisper-build-streams.tar.bz2, the same with a
+               file of four bzip2 blocks, in two streams; escape.zip, .tar.gz
+               and .tar.bz2, builds that reach outside.
 docs/adr/      the decisions that are expensive to reverse.
 docs/agents/   how an agent works in this repo. See "Agent skills" below.
 ```

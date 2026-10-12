@@ -1,9 +1,10 @@
 /**
  * Unpack a whisper.cpp build: a zip on Windows, a tar.gz on Linux, as
- * whisper.cpp publishes them (ADR-0005).
+ * whisper.cpp publishes them (ADR-0005). sherpa-onnx publishes a tar.bz2 for
+ * every system (ADR-0007).
  *
- * Node reads neither, and scribe takes no dependency, so this is a small
- * reader of its own over `node:zlib`: the same code on every system, with no
+ * Node reads none of them, and scribe takes no dependency, so this is a small
+ * reader of its own over `node:zlib` and `bzip2.ts`: the same code on every system, with no
  * program of the system's to find, and nothing in an archive is run. It reads
  * what whisper.cpp's archives hold, and refuses the rest with a sentence: a
  * zip that is encrypted, split or ZIP64, an entry of a kind it does not know.
@@ -21,6 +22,7 @@
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, posix } from 'node:path';
 import { gunzipSync, inflateRawSync } from 'node:zlib';
+import { bunzip2 } from './bzip2.ts';
 import type { Format } from './downloads.ts';
 
 /** One entry of an archive, read out of it. */
@@ -31,7 +33,10 @@ type Entry =
 
 /** Unpack an archive of this format into `into`, which must exist and be empty. */
 export function unpack(archive: Buffer, format: Format, into: string): void {
-  const entries = format === 'zip' ? readZip(archive) : readTar(gunzipSync(archive));
+  const entries =
+    format === 'zip'
+      ? readZip(archive)
+      : readTar(format === 'tar.gz' ? gunzipSync(archive) : bunzip2(archive));
   const files = new Map<string, Entry>();
   for (const entry of entries) {
     if (files.has(entry.path)) throw new Error(`${entry.path} is in the archive twice.`);

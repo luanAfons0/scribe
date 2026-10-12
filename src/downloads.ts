@@ -37,7 +37,10 @@ export type Download = {
 };
 
 /** How a build is packed. */
-export type Format = 'zip' | 'tar.gz';
+export type Format = 'zip' | 'tar.gz' | 'tar.bz2';
+
+/** Every format scribe unpacks. */
+const FORMATS: readonly Format[] = ['zip', 'tar.gz', 'tar.bz2'];
 
 /** A whisper.cpp build: an archive, and the path of whisper-cli inside it. */
 export type Build = Download & { readonly format: Format; readonly program: string };
@@ -87,7 +90,7 @@ export function readDownloads(env: NodeJS.ProcessEnv = process.env): Downloads {
     throw wrong('needs whisper.builds as an object');
   }
   for (const [system, build] of Object.entries(builds)) {
-    if (!isDownload(build) || (build['format'] !== 'zip' && build['format'] !== 'tar.gz') ||
+    if (!isDownload(build) || !FORMATS.includes(build['format'] as Format) ||
       typeof build['program'] !== 'string') {
       throw wrong(`has a build for ${system} without url, size, sha256, format and program`);
     }

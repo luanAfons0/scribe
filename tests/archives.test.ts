@@ -2,18 +2,23 @@
  * A whisper.cpp build is unpacked by scribe's own reader, and the reader
  * trusts no number an archive gives it: a size, an offset or a length that
  * leads past the bytes it holds is refused, and so is an entry that unpacks
- * to more than it says, or a path the archive holds twice (ADR-0005).
+ * to more than it says, or a path the archive holds twice (ADR-0005). A
+ * tar.bz2, as sherpa-onnx publishes it, is read by scribe's own bzip2 decoder,
+ * which refuses a stream that is damaged or cut short (ADR-0007).
  *
- * Each archive here is built by the test, byte by byte, so it can lie in the
- * one field the test is about. A local server serves it as the build for this
- * system, and the test reads the sentence the fetch failed with.
+ * Each zip and tar.gz here is built by the test, byte by byte, so it can lie
+ * in the one field the test is about. Node writes no bzip2, so a tar.bz2 is a
+ * fixture, damaged by the test where it must be. A local server serves the
+ * archive as the build for this system, and the test reads the sentence the
+ * fetch failed with.
  */
 import { strict as assert } from 'node:assert';
-import { readdir } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { deflateRawSync, gzipSync } from 'node:zlib';
 import { startedAndShaken, structureOf, type Started } from './helpers/plugin.ts';
-import { download, downloadsFile, serveFiles, SYSTEM } from './helpers/server.ts';
+import { download, downloadsFile, fixtureBytes, serveFiles, SYSTEM } from './helpers/server.ts';
 
 /** No whisper.cpp and no model from the environment: the Page is where they come from. */
 const UNSET = { SCRIBE_WHISPER: '', SCRIBE_WHISPER_MODEL: '' };
@@ -110,7 +115,7 @@ function zip(entries: readonly ZipEntry[]): Buffer {
 /** A Plugin Server whose build for this system is this archive. */
 async function withBuild(
   t: test.TestContext,
-  format: 'zip' | 'tar.gz',
+  format: 'zip' | 'tar.gz' | 'tar.bz2',
   archive: Buffer,
 ): Promise<Started> {
   const server = await serveFiles(t, { [`/build.${format}`]: archive });
@@ -218,3 +223,43 @@ for (const format of ['zip', 'tar.gz'] as const) {
     assert.equal(settings.settings.whisper.from, 'file');
   });
 }
+
+test('a tar.bz2 of many blocks, in two streams one after another, unpacks whole', async (t) => {
+  // Four blocks of bzip2 -1, as two streams, the way pbzip2 writes them.
+  const archive = await fixtureBytes('whisper-build-streams.tar.bz2');
+  const plugin = await withBuild(t, 'tar.bz2', archive);
+
+  const failed = await fetched(plugin);
+  const settings = structureOf<{ settings: Settings }>(await plugin.call('get_settings'));
+  const program = String(settings.settings.whisper.value);
+  const blocks = await readFile(join(dirname(program), 'blocks.txt'), 'utf8');
+
+  assert.equal(failed, null);
+  assert.equal(blocks.length, 300_000);
+  const line = 'scribe reads every block of a bzip2 stream\n';
+  assert.equal(blocks, line.repeat(7_000).slice(0, 300_000));
+});
+
+test('a tar.bz2 whose block does not match its CRC is refused', async (t) => {
+  const archive = Buffer.from(await fixtureBytes('whisper-build.tar.bz2'));
+  // The block's CRC comes after `BZh9` and the six bytes of the block's magic number.
+  archive[10] = (archive[10] as number) ^ 0xff;
+  const plugin = await withBuild(t, 'tar.bz2', archive);
+
+  await refused(plugin, /a block of it fails its CRC: it is damaged/);
+});
+
+test('a tar.bz2 cut short is refused', async (t) => {
+  const whole = await fixtureBytes('whisper-build.tar.bz2');
+  const archive = whole.subarray(0, Math.floor(whole.length / 2));
+  const plugin = await withBuild(t, 'tar.bz2', archive);
+
+  await refused(plugin, /it ends before its end of stream/);
+});
+
+test('a .tar.bz2 that is not bzip2 is refused', async (t) => {
+  const archive = await fixtureBytes('whisper-build.tar.gz');
+  const plugin = await withBuild(t, 'tar.bz2', archive);
+
+  await refused(plugin, /it is not a bzip2 stream/);
+});
