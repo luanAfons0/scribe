@@ -13,19 +13,27 @@ const RPC = 'rpc';
 const STOPPED = 503;
 const NO_PLUGIN_SERVER = 501;
 
+// A call this small is kept alive past the page that made it, so the last
+// save of a Popup that hides, and so unloads, still reaches the Plugin
+// Server. The browser keeps at most 64 KiB of these in flight, so a chunk of
+// audio is sent the usual way.
+const KEEP_ALIVE_BYTES = 16384;
+
 let calls = 0;
 
 /** One tool call on this Plugin's own Plugin Server. */
 async function call(name, args) {
+  const body = JSON.stringify({
+    jsonrpc: '2.0',
+    id: (calls += 1),
+    method: 'tools/call',
+    params: { name: name, arguments: args || {} },
+  });
   const response = await fetch(RPC, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: (calls += 1),
-      method: 'tools/call',
-      params: { name: name, arguments: args || {} },
-    }),
+    body: body,
+    keepalive: body.length < KEEP_ALIVE_BYTES,
   });
 
   if (response.status === STOPPED) {

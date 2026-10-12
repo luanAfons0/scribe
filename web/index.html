@@ -202,6 +202,19 @@
       <!-- The one sentence a bad value is refused with. -->
       <p class="fault" id="settings-refused" role="alert" hidden></p>
     </form>
+    <!-- The Popup's Shortcut. FirstMate holds it, so scribe has nothing to
+         save here: it shows the command line that binds it, drawn by
+         shortcut.js. -->
+    <div class="setting popup-shortcut">
+      <span class="section-label">Popup Shortcut</span>
+      <p class="setting-help">
+        FirstMate holds the Shortcut. Run this once in a terminal, with the keys you want:
+      </p>
+      <div class="command">
+        <code id="bind-command">firstmate bind Ctrl+Shift+J scribe jot.html</code>
+        <button class="act" id="copy-bind" type="button">Copy</button>
+      </div>
+    </div>
   </section>
 </main>
 <script src="rpc.js"></script>
@@ -210,6 +223,7 @@
 <script src="capture.js"></script>
 <script src="downloads.js"></script>
 <script src="settings.js"></script>
+<script src="shortcut.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

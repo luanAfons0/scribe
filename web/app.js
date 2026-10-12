@@ -138,6 +138,7 @@ async function showList() {
 
 /** One Call, drawn whole. Answers whether it is still changing. */
 async function showCall(id) {
+  const mark = jottings.mark();
   const found = (await call('get_call', { id: id })).call;
   callTitle.textContent = nameOf(found);
   callMeta.textContent =
@@ -147,7 +148,7 @@ async function showCall(id) {
   deleteButton.hidden = found.state === 'recording';
   callView.dataset.title = found.title || '';
   cutNote.hidden = found.state !== 'cut';
-  jottings.show(found.id, found.jottings);
+  jottings.show(found.id, found.jottings, mark);
 
   const whole = wholeTranscript.has(found.id) || found.transcript.length <= LAST_LINES;
   const hidden = whole ? 0 : found.transcript.length - LAST_LINES;
@@ -433,4 +434,6 @@ sendButton.addEventListener('click', sendToWorklog);
 stopButton.addEventListener('click', () => stop(shownId()));
 liveStop.addEventListener('click', () => stop(Number(live.dataset.id)));
 window.addEventListener('hashchange', show);
+// The Popup may have changed the Jottings while this tab had no focus.
+window.addEventListener('focus', show);
 show();

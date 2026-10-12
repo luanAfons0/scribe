@@ -292,6 +292,25 @@ The Call's page has a Jottings box, during the Call and after it. Every
 change is kept at once. A line that starts with `#` is a heading, and the
 Minutes keep your headings in your order.
 
+### The Popup
+
+The Popup lets you write the Jottings without leaving the call's tab. Bind a
+Shortcut to scribe's `jot.html` once, in a terminal:
+
+```
+firstmate bind Ctrl+Shift+J scribe jot.html
+```
+
+Use the keys you want. Settings shows this line, with a Copy button. During a
+Call, press the Shortcut: FirstMate opens the Popup over the call. It shows
+the whole Jottings of the Call that records, and **Stop**. Every change is kept
+at once, so the Popup loses nothing when it hides. **Esc** hides it, and so
+does a click back into the call. The Call's page reads the Jottings again when
+its tab gets focus, so the two never write an old copy over each other.
+
+The Popup never records: a Call records only in a browser tab (ADR-0001). With
+no Call recording, the Popup says so, and says to start one in scribe's tab.
+
 ### A Cut Call
 
 When the recording tab closes, the browser quits or the machine sleeps, no
