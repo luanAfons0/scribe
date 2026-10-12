@@ -13,6 +13,7 @@ import {
   checkMinutes,
   checkTitle,
   deleteCall,
+  eventAt,
   listCalls,
   recordingCall,
   renameCall,
@@ -91,9 +92,12 @@ export function toolsFor(parts: Parts): readonly Tool[] {
       name: 'start_call',
       description:
         'Start a Call. It is refused while another Call records, with a sentence that names it, ' +
-        'and while whisper.cpp or its model is missing, with a sentence that names the setting.',
+        'and while whisper.cpp or its model is missing, with a sentence that names the setting. ' +
+        'From five minutes before an Event until it ends, the Call is for that Event: its ' +
+        'event is { name, start }, and its title is the Event\'s name, as one given with ' +
+        'rename_call. Of two such Events, the one that started last.',
       inputSchema: { type: 'object', properties: {}, required: [] },
-      call: () => told({ call: recorder.start() }),
+      call: () => told({ call: recorder.start(eventAt(calendar, Date.now())) }),
     },
 
     {

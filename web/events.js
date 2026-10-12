@@ -44,9 +44,15 @@ async function drawUpcoming() {
   const startPlain = document.getElementById('start');
   const { events } = await call('list_events');
   const now = Date.now();
-  const soon = events.find(
-    (event) => Date.parse(event.start) - SOON_MS <= now && Date.parse(event.end) > now,
-  );
+  // Of two Events at once, the one that starts last is the one a Call started
+  // now is for, so the banner shows that one.
+  const soon = events
+    .filter((event) => Date.parse(event.start) - SOON_MS <= now && Date.parse(event.end) > now)
+    .reduce(
+      (latest, event) =>
+        latest === undefined || Date.parse(event.start) > Date.parse(latest.start) ? event : latest,
+      undefined,
+    );
   const later = events.find((event) => Date.parse(event.start) - SOON_MS > now);
 
   banner.hidden = soon === undefined;

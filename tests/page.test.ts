@@ -399,3 +399,13 @@ test('the banner is the accent blue, light and dark, and never red', async () =>
   assert.match(rule, /background: var\(--accent-soft\)/);
   assert.ok(!/--live/.test(rule), 'the banner uses the red of recording');
 });
+
+test('a Call named after its Event says so on its meta line, with Event in the accent', async () => {
+  const code = await readFile(join(WEB, 'app.js'), 'utf8');
+  const css = await readFile(join(WEB, 'app.css'), 'utf8');
+
+  assert.match(code, /found\.event !== null && found\.title === found\.event\.name/);
+  assert.match(code, /className = 'from-event';\s*event\.textContent = 'Event';/);
+  assert.match(code, /callMeta\.append\(' · Title from the ', event\)/);
+  assert.match(css, /\.from-event \{[^}]*color: var\(--accent\)/);
+});
