@@ -261,7 +261,9 @@ export function toolsFor(parts: Parts): readonly Tool[] {
       description:
         'The settings the operator chooses: whisper (the whisper.cpp executable), whisperModel ' +
         '(its model), minutesCommand (the program and arguments that make the Minutes) and ' +
-        'worklogPlugin (the Plugin a Call\'s Entry goes to). Each has the value scribe uses ' +
+        'worklogPlugin (the Plugin a Call\'s Entry goes to) and diarizer (the directory of ' +
+        'sherpa-onnx\'s diarizer and its two models, which tells the call\'s sound apart into ' +
+        'Speakers; none is no problem). Each has the value scribe uses ' +
         '(null for none); from: "environment" when its variable is set, "file" when the ' +
         'settings file holds it, "default" for none; saved, what the settings file holds; ' +
         'variable, the one that beats the file; problem, the one sentence that says what ' +
@@ -303,6 +305,12 @@ export function toolsFor(parts: Parts): readonly Tool[] {
           worklogPlugin: {
             type: ['string', 'null'],
             description: "The Registry name of the Worklog Plugin a Call's Entry goes to.",
+          },
+          diarizer: {
+            type: ['string', 'null'],
+            description:
+              'The absolute path of the diarizer directory: sherpa-onnx-offline-speaker-' +
+              'diarization, segmentation.onnx and embedding.onnx, side by side.',
           },
           calendarUrl: {
             type: ['string', 'null'],
@@ -347,9 +355,12 @@ export function toolsFor(parts: Parts): readonly Tool[] {
         'What scribe can fetch for this system, and how far each download got. whisper: the ' +
         'release, the build for this system (null when whisper.cpp publishes none, with ' +
         'missing, the sentence that says how to get one) and fetch. models: the models ' +
-        'offered, each with its size in bytes, and fetch. A fetch is null when none runs, ' +
-        'or { name, received, size, failed }, where failed is null while it runs and the ' +
-        'one sentence it failed with after. Nothing is fetched by this tool.',
+        'offered, each with its size in bytes, and fetch. diarizer: the sherpa-onnx release, ' +
+        'this system as a person names it (system), the build for this system with both ' +
+        'models, as their size in bytes together (null where none is offered, with ' +
+        'missing, the sentence that says how to get one), and fetch. A fetch is null when ' +
+        'none runs, or { name, received, size, failed }, where failed is null while it runs ' +
+        'and the one sentence it failed with after. Nothing is fetched by this tool.',
       inputSchema: { type: 'object', properties: {}, required: [] },
       call: () => told({ downloads: fetcher.view() }),
     },
@@ -384,6 +395,21 @@ export function toolsFor(parts: Parts): readonly Tool[] {
       },
       call: (given) => {
         fetcher.fetchModel(given['name']);
+        return told({ downloads: fetcher.view() });
+      },
+    },
+
+    {
+      name: 'fetch_diarizer',
+      description:
+        'Fetch the sherpa-onnx diarizer for this system and its two models, check each ' +
+        'against its SHA-256, keep only what the diarizer needs as one directory under ' +
+        'downloads/ in the Plugin directory, and set diarizer to it. It starts the download ' +
+        'and answers what get_downloads answers at once. It is refused where no build is ' +
+        'offered for this system, and while one is being fetched.',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+      call: () => {
+        fetcher.fetchDiarizer();
         return told({ downloads: fetcher.view() });
       },
     },

@@ -16,6 +16,13 @@
  * does not match is refused with a sentence, so a broken download is never
  * unpacked. Streams one after another, as pbzip2 writes them, are read as one.
  * The old "randomised" blocks, which no bzip2 since 0.9.5 writes, are refused.
+ *
+ * It reads its input a chunk at a time, and gives its output a block at a
+ * time, each once its CRC matches: the Windows build of sherpa-onnx is 239 MB
+ * that unpack to 1.3 GB, and a machine of 8 GB must hold neither whole. A
+ * block is at most 900 kB before its runs are put back. The CRC of a stream is
+ * checked after its last block, so whoever reads the blocks keeps nothing
+ * until the last one is read.
  */
 
 /** The magic number that starts a block: the digits of pi. */
@@ -46,19 +53,20 @@ const CRC_TABLE = ((): Int32Array => {
   return table;
 })();
 
-/** Decompress a whole bzip2 file, or throw a sentence that says what is wrong with it. */
-export function bunzip2(data: Uint8Array): Buffer {
-  const input = bitReader(data);
-  const parts: Buffer[] = [];
+/**
+ * Decompress bzip2 read from these chunks, one block at a time, or throw a
+ * sentence that says what is wrong with it.
+ */
+export function* bunzip2(chunks: Iterable<Uint8Array>): Generator<Buffer> {
+  const input = bitReader(chunks[Symbol.iterator]());
   do {
-    parts.push(...readStream(input));
+    yield* readStream(input);
     input.alignToByte();
   } while (!input.atEnd());
-  return Buffer.concat(parts);
 }
 
 /** The blocks of one stream, from its `BZh` header to its end magic. */
-function readStream(input: BitReader): Buffer[] {
+function* readStream(input: BitReader): Generator<Buffer> {
   if (input.bits(8) !== 0x42 || input.bits(8) !== 0x5a || input.bits(8) !== 0x68) {
     throw new Error('it is not a bzip2 stream.');
   }
@@ -66,20 +74,19 @@ function readStream(input: BitReader): Buffer[] {
   if (level < 1 || level > 9) throw new Error(`its block size, ${level}, is not 1 to 9.`);
   const maxBlock = level * 100_000;
 
-  const blocks: Buffer[] = [];
   let combined = 0;
   for (;;) {
     const magic = [input.bits(16), input.bits(16), input.bits(16)];
     const crc = ((input.bits(16) << 16) | input.bits(16)) >>> 0;
     if (same(magic, END_MAGIC)) {
       if (crc !== combined) throw new Error('its CRC does not match: it is damaged.');
-      return blocks;
+      return;
     }
     if (!same(magic, BLOCK_MAGIC)) throw new Error('a block of it has no magic number.');
     const block = readBlock(input, maxBlock);
     if (crcOf(block) !== crc) throw new Error('a block of it fails its CRC: it is damaged.');
     combined = (((combined << 1) | (combined >>> 31)) ^ crc) >>> 0;
-    blocks.push(block);
+    yield block;
   }
 }
 
@@ -351,7 +358,7 @@ function same(left: readonly number[], right: readonly number[]): boolean {
   return left.every((value, n) => value === right[n]);
 }
 
-/** Bits from a byte array, most significant first, as bzip2 writes them. */
+/** Bits from chunks of bytes, most significant first, as bzip2 writes them. */
 type BitReader = {
   /** The next `count` bits, at most 24, as a number. */
   readonly bits: (count: number) => number;
@@ -365,13 +372,24 @@ type BitReader = {
   readonly atEnd: () => boolean;
 };
 
-/** A reader of these bytes, from the first bit. */
-function bitReader(data: Uint8Array): BitReader {
+/** A reader of these chunks, from the first bit, which asks for a chunk only when it needs it. */
+function bitReader(chunks: Iterator<Uint8Array>): BitReader {
+  let data: Uint8Array = new Uint8Array(0);
   let at = 0;
   let held = 0;
   let count = 0;
+  /** Whether a byte is left to read, after the next chunk is asked for if it must be. */
+  const more = (): boolean => {
+    while (at >= data.length) {
+      const next = chunks.next();
+      if (next.done === true) return false;
+      data = next.value;
+      at = 0;
+    }
+    return true;
+  };
   const fill = (wanted: number): void => {
-    while (count < wanted && at < data.length) {
+    while (count < wanted && (at < data.length || more())) {
       held = (held << 8) | (data[at] as number);
       at += 1;
       count += 8;
@@ -396,6 +414,6 @@ function bitReader(data: Uint8Array): BitReader {
     alignToByte: () => {
       count -= count % 8;
     },
-    atEnd: () => at >= data.length && count === 0,
+    atEnd: () => count === 0 && !more(),
   };
 }

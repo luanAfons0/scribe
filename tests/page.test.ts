@@ -173,11 +173,13 @@ test('downloads.js fetches through the fetch tools, and only from a click', asyn
   assert.match(code, /call\('get_downloads'/);
   assert.match(code, /call\('fetch_whisper'/);
   assert.match(code, /call\('fetch_model'/);
+  assert.match(code, /call\('fetch_diarizer'/);
   // Nothing is fetched without the operator asking: each fetch tool is
   // called once, in the click handler of its own button.
   for (const [tool, button] of [
     ['fetch_whisper', 'fetch-whisper'],
     ['fetch_model', 'fetch-model'],
+    ['fetch_diarizer', 'fetch-diarizer'],
   ]) {
     assert.equal(code.split(`call('${tool}'`).length, 2, `${tool} is called more than once`);
     const handler = new RegExp(
@@ -185,6 +187,31 @@ test('downloads.js fetches through the fetch tools, and only from a click', asyn
     );
     assert.match(code, handler, `${tool} is not called from the click of #${button}`);
   }
+});
+
+test(
+  'the Settings view offers to fetch Speakers, with its progress, its result, and its problem',
+  async () => {
+    const html = await readFile(join(WEB, 'index.html'), 'utf8');
+
+    for (const id of [
+      'diarizer-offer', 'diarizer-offer-text', 'fetch-diarizer', 'diarizer-progress',
+      'diarizer-fetch-failed', 'diarizer-done', 'diarizer-done-text', 'diarizer-ignored',
+      'diarizer-problem',
+    ]) {
+      assert.ok(html.includes(`id="${id}"`), `index.html has no #${id}`);
+    }
+    assert.match(html, /<button[^>]*id="fetch-diarizer"[^>]*type="button"[^>]*>Fetch Speakers</);
+    assert.match(html, /Tells the people in the call’s sound apart after each Call stops\./);
+  },
+);
+
+test('downloads.js offers Speakers only while the diarizer is not set or has a problem', async () => {
+  const code = await readFile(join(WEB, 'downloads.js'), 'utf8');
+
+  assert.match(code, /diarizerSetting = settings\.diarizer/);
+  assert.match(code, /setting\.value !== null && setting\.problem === null/);
+  assert.match(code, /New Calls get Speakers\./);
 });
 
 test('downloads.js offers whisper.cpp only while it is not set or has a problem', async () => {

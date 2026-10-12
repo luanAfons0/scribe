@@ -17,6 +17,7 @@ import {
 const TOOLS = [
   'append_audio',
   'delete_call',
+  'fetch_diarizer',
   'fetch_model',
   'fetch_whisper',
   'get_call',

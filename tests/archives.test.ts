@@ -257,6 +257,26 @@ test('a tar.bz2 cut short is refused', async (t) => {
   await refused(plugin, /it ends before its end of stream/);
 });
 
+test(
+  'a tar.bz2 whose stream fails its CRC is refused, though its tar is whole',
+  async (t) => {
+    const archive = Buffer.from(await fixtureBytes('whisper-build.tar.bz2'));
+    // The stream's CRC is the last 32 bits before at most 7 bits that end the
+    // byte, so the byte before the last is all CRC. The tar ends before it.
+    archive[archive.length - 2] = (archive[archive.length - 2] as number) ^ 0xff;
+    const plugin = await withBuild(t, 'tar.bz2', archive);
+
+    await refused(plugin, /its CRC does not match: it is damaged/);
+  },
+);
+
+test('a tar.bz2 cut short after the end of its tar is refused', async (t) => {
+  const whole = await fixtureBytes('whisper-build.tar.bz2');
+  const plugin = await withBuild(t, 'tar.bz2', whole.subarray(0, whole.length - 3));
+
+  await refused(plugin, /it ends before its end of stream/);
+});
+
 test('a .tar.bz2 that is not bzip2 is refused', async (t) => {
   const archive = await fixtureBytes('whisper-build.tar.gz');
   const plugin = await withBuild(t, 'tar.bz2', archive);

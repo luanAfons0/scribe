@@ -432,6 +432,11 @@ kbd {
   font: 12px/1.4 var(--mono);
 }
 
+/* Speakers: an offer to fetch, after the settings to save, with nothing to save. */
+.speakers-setting { margin-top: 24px; }
+.speakers-setting > .setting-help { margin-top: 0; }
+.speakers-setting + .popup-shortcut { margin-top: 0; }
+
 /* The Popup Shortcut: a command line to copy, after the settings to save. */
 .popup-shortcut { margin-top: 24px; }
 .popup-shortcut .setting-help { margin-top: 0; }

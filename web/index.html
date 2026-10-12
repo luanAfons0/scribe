@@ -246,6 +246,33 @@
       <!-- The one sentence a bad value is refused with. -->
       <p class="fault" id="settings-refused" role="alert" hidden></p>
     </form>
+    <!-- Speakers: sherpa-onnx's diarizer and its two models, drawn by
+         downloads.js out of get_settings and get_downloads, and fetched only
+         on a click (ADR-0007). There is nothing to save here: a fetch sets
+         it, and SCRIBE_DIARIZER beats it. -->
+    <div class="setting speakers-setting">
+      <span class="section-label">Speakers</span>
+      <p class="setting-help">
+        Tells the people in the call’s sound apart after each Call stops. It
+        runs on this machine, and scribe deletes the call’s sound once it is read.
+      </p>
+      <div class="fetch">
+        <div id="diarizer-offer">
+          <p class="setting-help" id="diarizer-offer-text"></p>
+          <div class="fetch-acts">
+            <button class="act" id="fetch-diarizer" type="button">Fetch Speakers</button>
+            <progress class="fetch-progress" id="diarizer-progress" max="1" value="0"
+              hidden></progress>
+          </div>
+          <p class="fault setting-problem" id="diarizer-fetch-failed" role="alert" hidden></p>
+        </div>
+        <div id="diarizer-done" hidden>
+          <p class="setting-from" id="diarizer-done-text"></p>
+        </div>
+      </div>
+      <p class="fault setting-problem" id="diarizer-ignored" hidden></p>
+      <p class="fault setting-problem" id="diarizer-problem" hidden></p>
+    </div>
     <!-- The Popup's Shortcut. FirstMate holds it, so scribe has nothing to
          save here: it shows the command line that binds it, drawn by
          shortcut.js. -->

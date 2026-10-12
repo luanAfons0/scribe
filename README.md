@@ -22,6 +22,10 @@ is recorded in the FirstMate window and why the Minutes come from a command.
   the CPU. scribe fetches both from its Plugin Page when you ask, on Windows
   and on Linux, x64 and arm64. You can also build whisper.cpp yourself. On
   Windows the executable is `whisper-cli.exe`.
+- **sherpa-onnx's diarizer**, optional, which tells the people in the call's
+  sound apart into Speakers after a Call stops. scribe fetches it from its
+  Plugin Page when you ask, on Windows x64 and Linux x64. Without it, scribe
+  works as before, and their lines stay `Outros`.
 - **The FirstMate App on Windows**, to record a Call. scribe records in the
   App's window, and the App gives a capture its sound on Windows only. On
   Linux, scribe runs, but it refuses to start a Call (see "Record a Call").
@@ -50,6 +54,33 @@ The Linux builds are the ones whisper.cpp makes on Ubuntu: they need glibc
 2.34 or newer and `libgomp.so.1`, which `gcc` brings. Where whisper.cpp
 publishes no build for the system, such as macOS, the Page says so and how to
 build one; build it as below and give its path.
+
+### Get Speakers from the Plugin Page
+
+Press **Fetch Speakers** under Speakers, in the Settings view. scribe fetches
+three files from sherpa-onnx's GitHub releases, each checked against the
+SHA-256 pinned in `src/downloads.json`: the sherpa-onnx 1.13.8 build for this
+system, the pyannote segmentation 3.0 model and the 3D-Speaker CAM++ VoxCeleb
+embedding model (ADR-0007). That is 65 MB in all on Linux x64, and 275 MB on
+Windows x64, where the build that runs is the static one, which holds every
+sherpa-onnx program. Of the build, scribe keeps only
+`sherpa-onnx-offline-speaker-diarization` (`.exe` on Windows) and, on Linux,
+the `libonnxruntime.so` it loads, about 17 MB on Windows and 28 MB on Linux.
+It keeps them, with the two models, in one diarizer directory under
+`downloads/diarizer/`, and sets the diarizer to it. The Page shows how far the
+fetch got, and a fetch that fails is said in one sentence, with nothing kept,
+as for whisper.cpp.
+
+The diarizer is set when its directory holds all three files, side by side:
+
+| File | What it is |
+| ---- | ---------- |
+| `sherpa-onnx-offline-speaker-diarization` (`.exe` on Windows) | sherpa-onnx's program, with the libraries it loads. |
+| `segmentation.onnx` | The segmentation model, `model.onnx` of `sherpa-onnx-pyannote-segmentation-3-0`. |
+| `embedding.onnx` | The embedding model, `3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx`. |
+
+On another system, build sherpa-onnx as its README says, make such a
+directory by hand, and set `SCRIBE_DIARIZER` to it (see "Variables").
 
 ### Build whisper.cpp
 
@@ -93,6 +124,7 @@ shell or a systemd service.
 | Minutes command        | The command that makes the Minutes, as a JSON array: the program, then its arguments. Optional; see below. |
 | Worklog Plugin         | The Registry name of the Worklog Plugin that Send to Worklog sends to. Optional; see below. |
 | Calendar               | Your Google Calendar's secret iCal address, for its Events. Optional; see "Events" below. |
+| Speakers               | The diarizer directory, which **Fetch Speakers** sets. Optional; see "Get Speakers from the Plugin Page". |
 
 scribe keeps them in `settings.json`, in its own Plugin directory, beside
 `scribe.db`. A field left empty is none. A value that is not in its form, such
@@ -127,6 +159,7 @@ Host's systemd drop-in, and set the Minutes command on the Page instead.
 | `SCRIBE_MINUTES_COMMAND` | The Minutes command, as a JSON array.                   |
 | `SCRIBE_WORKLOG_PLUGIN`  | The Worklog Plugin.                                     |
 | `SCRIBE_CALENDAR_URL`    | The calendar's secret iCal address. scribe never prints it. |
+| `SCRIBE_DIARIZER`        | The diarizer directory: its program and its two models, as in "Get Speakers from the Plugin Page". |
 
 These are set in the environment alone:
 

@@ -53,6 +53,7 @@ const SETTINGS: Readonly<Record<string, string>> = {
   SCRIBE_WHISPER: fixture('whisper'),
   SCRIBE_WHISPER_MODEL: join(FIXTURES, 'model.bin'),
   SCRIBE_MINUTES_COMMAND: '',
+  SCRIBE_DIARIZER: '',
 };
 
 /** The `mcp.ts` entry point the Host runs with its own Node, on every system. */

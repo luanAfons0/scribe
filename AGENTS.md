@@ -71,13 +71,17 @@ src/           the Plugin Server. Every file is one job.
                it whole through a rename.
   downloads.ts what can be fetched: read downloads.json, or the list
                SCRIBE_DOWNLOADS names (ADR-0005).
-  downloads.json each whisper.cpp build and model, with its URL, size and
+  downloads.json each whisper.cpp build and model, and each sherpa-onnx
+               build and the diarizer's two models, with its URL, size and
                pinned SHA-256, as data.
-  fetcher.ts   fetch a build or a model when the Page asks, check it, keep it
-               under downloads/, and set it.
+  fetcher.ts   fetch a build or a model, or the diarizer, when the Page asks,
+               check it, keep it under downloads/, and set it.
   unpack.ts    a zip, a tar.gz or a tar.bz2, unpacked inside one directory, by
-               scribe's own reader over node:zlib and bzip2.ts.
-  bzip2.ts     scribe's own bzip2 decoder, as node:zlib has none (ADR-0007).
+               scribe's own reader over node:zlib and bzip2.ts; all of it, or
+               only the members the caller names.
+  bzip2.ts     scribe's own bzip2 decoder, as node:zlib has none (ADR-0007). It
+               reads a chunk at a time and gives a block at a time, so a
+               sherpa-onnx build is never held whole.
   command.ts   a command's form, a JSON array of program and arguments, read
                in one place; and its program, found on the PATH.
   run.ts       run a program with no shell, on Windows and Linux, and end its
@@ -117,8 +121,8 @@ web/           the Plugin Page, as the Host serves it.
                and what its last read gave.
   events.js    the Calls list's Event: a banner from five minutes before it
                until it ends, or the next one in one line.
-  downloads.js the offers to fetch whisper.cpp and a model, and how far each
-               download got.
+  downloads.js the offers to fetch whisper.cpp, a model and Speakers, and how
+               far each download got.
   jottings.js  keepJottings(): the box that keeps every change at once, and
                takes the text the Popup saved.
   jot.html     the Popup a Shortcut opens: the Jottings of the Call that
@@ -136,7 +140,10 @@ tests/         one file per behaviour, plus helpers/ and fixtures/.
                whisper-build.zip, .tar.gz and .tar.bz2, the fixture whisper
                packed as a build; whisper-build-streams.tar.bz2, the same with a
                file of four bzip2 blocks, in two streams; escape.zip, .tar.gz
-               and .tar.bz2, builds that reach outside.
+               and .tar.bz2, builds that reach outside. diarizer-build.tar.bz2,
+               segmentation.tar.bz2 and embedding.onnx, a fake diarizer and
+               its two models; diarizer-escape.tar.bz2, a build with a member
+               that reaches outside.
 docs/adr/      the decisions that are expensive to reverse.
 docs/agents/   how an agent works in this repo. See "Agent skills" below.
 ```

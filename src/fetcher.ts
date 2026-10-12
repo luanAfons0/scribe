@@ -1,6 +1,6 @@
 /**
- * whisper.cpp and its model, fetched when the operator asks from the Plugin
- * Page, and never otherwise (ADR-0005).
+ * whisper.cpp and its model, and the diarizer, fetched when the operator asks
+ * from the Plugin Page, and never otherwise (ADR-0005, ADR-0007).
  *
  * Each download is streamed into a file beside where it will be kept, its
  * SHA-256 worked out as it comes, and checked before anything is kept. A
@@ -16,17 +16,28 @@
  * lost. A Plugin Server that stops halfway leaves `.part` files, which the
  * next start removes, and a build set aside, which it puts back or removes.
  *
+ * The diarizer is three downloads kept as one directory: a sherpa-onnx build,
+ * of which only the members the list names are kept, the segmentation model,
+ * of which only the model is kept, and the embedding model. Its progress is
+ * that of the three together, and the setting names the directory.
+ *
  * A download runs while the tools answer: the tool that starts it answers at
  * once, and `get_downloads` says how far it got, or the one sentence it
  * failed with.
  */
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
-import { chmod, mkdir, open, rename, readFile, rm, rmdir, stat } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
-import { thisSystem, type Download, type Downloads } from './downloads.ts';
+import { chmod, mkdir, open, rename, rm, rmdir, stat } from 'node:fs/promises';
+import { dirname, join, posix, resolve } from 'node:path';
+import { thisSystem, type Download, type Downloads, type Format } from './downloads.ts';
 import { badInput, sentenceFor } from './mcp.ts';
-import type { Choices, Settings } from './settings.ts';
+import {
+  DIARIZER_PROGRAM,
+  EMBEDDING_MODEL,
+  SEGMENTATION_MODEL,
+  type Choices,
+  type Settings,
+} from './settings.ts';
 import { unpack } from './unpack.ts';
 
 /** The directory, inside the Plugin directory, that holds what scribe fetched. */
@@ -43,7 +54,7 @@ const ASIDE = '.old';
  * in place as bytes come; the view gets a copy.
  */
 export type FetchView = {
-  /** What is fetched: whisper.cpp and its release, or the model's file name. */
+  /** What is fetched: whisper.cpp or sherpa-onnx and its release, or the model's file name. */
   readonly name: string;
   /** How many bytes have come so far. */
   received: number;
@@ -71,9 +82,20 @@ export type DownloadsView = {
     readonly default: string | null;
     readonly fetch: FetchView | null;
   };
+  readonly diarizer: {
+    /** The sherpa-onnx release a build would be of. */
+    readonly release: string;
+    /** This system, as a person names it, such as Linux x64. */
+    readonly system: string;
+    /** The build for this system, with both models, as the bytes of all three; or null. */
+    readonly build: { readonly size: number } | null;
+    /** How to get the diarizer when there is no build to fetch, or null. */
+    readonly missing: string | null;
+    readonly fetch: FetchView | null;
+  };
 };
 
-/** The fetching of whisper.cpp and its model, in one running Plugin Server. */
+/** The fetching of whisper.cpp, its model and the diarizer, in one running Plugin Server. */
 export type Fetcher = {
   /** What can be fetched for this system, and how far each download got. */
   view(): DownloadsView;
@@ -81,25 +103,28 @@ export type Fetcher = {
   fetchWhisper(): void;
   /** Start fetching the model of this name, or refuse with a sentence. */
   fetchModel(name: unknown): void;
+  /** Start fetching the diarizer for this system and its two models, or refuse with a sentence. */
+  fetchDiarizer(): void;
 };
 
-/** The two downloads that may run at once: one of whisper.cpp, one of a model. */
-type Slot = 'whisper' | 'model';
+/** The downloads that may run at once: one of each. */
+type Slot = 'whisper' | 'model' | 'diarizer';
+
+/** One file a job downloads, and the file its bytes are written into as they come. */
+type Part = { readonly source: Download; readonly into: string };
 
 /** One download, as `startDownload` runs it. */
 type Job = {
   /** What is fetched, as the view and every sentence name it. */
   readonly name: string;
-  /** Where it comes from, how big it is, and its SHA-256. */
-  readonly source: Download;
+  /** What it downloads, one after another, each checked before the next. */
+  readonly parts: readonly Part[];
   /** Where it stays once it is in place: a file or a directory. */
   readonly kept: string;
-  /** The file the bytes are written into as they come. */
-  readonly into: string;
   /** The setting that names what was fetched. */
-  readonly setting: 'whisper' | 'whisperModel';
+  readonly setting: 'whisper' | 'whisperModel' | 'diarizer';
   /**
-   * Make what is kept, at `part`, out of the checked bytes in `into`, and
+   * Make what is kept, at `part`, out of the checked bytes of each part, and
    * hand back the path the setting names once `part` is at `kept`.
    */
   readonly make: (part: string) => Promise<string>;
@@ -115,7 +140,9 @@ export function fetcherFor(
   const build = list.whisper.builds[thisSystem()] ?? null;
   const release = list.whisper.release;
   const top = resolve(directory, DOWNLOADS_DIRECTORY);
-  const fetches: Record<Slot, FetchView | null> = { whisper: null, model: null };
+  const diarizer = list.diarizer;
+  const diarizerBuild = diarizer.builds[thisSystem()] ?? null;
+  const fetches: Record<Slot, FetchView | null> = { whisper: null, model: null, diarizer: null };
   clearInterrupted(top);
 
   /** Start one download, and answer at once; it ends kept and set, or failed with a sentence. */
@@ -129,7 +156,7 @@ export function fetcherFor(
     const progress: FetchView = {
       name: job.name,
       received: 0,
-      size: job.source.size,
+      size: job.parts.reduce((sum, part) => sum + part.source.size, 0),
       failed: null,
     };
     fetches[slot] = progress;
@@ -138,7 +165,9 @@ export function fetcherFor(
     const fetchAndKeep = async (): Promise<void> => {
       await mkdir(home, { recursive: true });
       await rm(part, { recursive: true, force: true });
-      await downloadAndVerify(job.source, job.into, progress, settings.fetchIdleMs);
+      for (const each of job.parts) {
+        await downloadAndVerify(each.source, each.into, progress, settings.fetchIdleMs);
+      }
       const named = await job.make(part);
       await putInPlace(part, job.kept, () => choices.update({ [job.setting]: named }));
     };
@@ -147,7 +176,9 @@ export function fetcherFor(
         if (fetches[slot] === progress) fetches[slot] = null;
       },
       async (fault: unknown) => {
-        await rm(job.into, { force: true }).catch(() => undefined);
+        for (const each of job.parts) {
+          await rm(each.into, { force: true }).catch(() => undefined);
+        }
         await rm(part, { recursive: true, force: true }).catch(() => undefined);
         await removeIfEmpty(home, top);
         progress.failed = `${sentenceFor(fault).replace(/\.$/, '')}, so nothing was kept.`;
@@ -168,6 +199,16 @@ export function fetcherFor(
         default: list.defaultModel,
         fetch: fetches.model === null ? null : { ...fetches.model },
       },
+      diarizer: {
+        release: diarizer.release,
+        system: systemName(),
+        build:
+          diarizerBuild === null
+            ? null
+            : { size: diarizerBuild.size + diarizer.segmentation.size + diarizer.embedding.size },
+        missing: diarizerBuild === null ? noDiarizer(diarizer.release) : null,
+        fetch: fetches.diarizer === null ? null : { ...fetches.diarizer },
+      },
     }),
 
     fetchWhisper: () => {
@@ -177,21 +218,12 @@ export function fetcherFor(
       const into = `${kept}.${build.format}${PART}`;
       startDownload('whisper', {
         name,
-        source: build,
+        parts: [{ source: build, into }],
         kept,
-        into,
         setting: 'whisper',
         make: async (part) => {
-          const bytes = await readFile(into);
-          await rm(into, { force: true });
           await mkdir(part);
-          try {
-            unpack(bytes, build.format, part);
-          } catch (fault) {
-            throw new Error(
-              `${name} from ${build.url} could not be unpacked: ${sentenceFor(fault)}`,
-            );
-          }
+          await unpackPart(name, build, build.format, into, part);
           const inside = build.program.split('/');
           const program = join(part, ...inside);
           if (!(await stat(program).catch(() => null))?.isFile()) {
@@ -215,14 +247,93 @@ export function fetcherFor(
       // A model is one file, written where it is made: it is in place once renamed.
       startDownload('model', {
         name: chosen.name,
-        source: chosen,
+        parts: [{ source: chosen, into: `${kept}${PART}` }],
         kept,
-        into: `${kept}${PART}`,
         setting: 'whisperModel',
         make: async () => kept,
       });
     },
+
+    fetchDiarizer: () => {
+      if (diarizerBuild === null) throw badInput(noDiarizer(diarizer.release));
+      const name = `sherpa-onnx ${diarizer.release}`;
+      const kept = join(top, 'diarizer', `${diarizer.release}-${thisSystem()}`);
+      const build = `${kept}.build.${diarizerBuild.format}${PART}`;
+      const segmentation = `${kept}.segmentation.${diarizer.segmentation.format}${PART}`;
+      const embedding = `${kept}.${EMBEDDING_MODEL}${PART}`;
+      startDownload('diarizer', {
+        name,
+        parts: [
+          { source: diarizerBuild, into: build },
+          { source: diarizer.segmentation, into: segmentation },
+          { source: diarizer.embedding, into: embedding },
+        ],
+        kept,
+        setting: 'diarizer',
+        // One directory, with every file side by side: the Linux program finds
+        // its ONNX Runtime beside itself.
+        make: async (part) => {
+          await mkdir(part);
+          const members = diarizerBuild.keep.map((member): [string, string] => [
+            member,
+            posix.basename(member),
+          ]);
+          await unpackPart(name, diarizerBuild, diarizerBuild.format, build, part, members);
+          await unpackPart(name, diarizer.segmentation, diarizer.segmentation.format,
+            segmentation, part, [[diarizer.segmentation.member, SEGMENTATION_MODEL]]);
+          await rename(embedding, join(part, EMBEDDING_MODEL));
+          const program = join(part, DIARIZER_PROGRAM);
+          if (!(await stat(program).catch(() => null))?.isFile()) {
+            throw new Error(`${name} from ${diarizerBuild.url} holds no ${DIARIZER_PROGRAM}.`);
+          }
+          await chmod(program, 0o755);
+          return kept;
+        },
+      });
+    },
   };
+}
+
+/**
+ * Unpack the checked download at `into` into `part`, and remove it; with
+ * `keep`, only those members, each at the name it maps to.
+ */
+async function unpackPart(
+  name: string,
+  source: Download,
+  format: Format,
+  into: string,
+  part: string,
+  keep?: readonly (readonly [string, string])[],
+): Promise<void> {
+  try {
+    unpack(into, format, part, keep === undefined ? undefined : new Map(keep));
+  } catch (fault) {
+    throw new Error(`${name} from ${source.url} could not be unpacked: ${sentenceFor(fault)}`);
+  } finally {
+    await rm(into, { force: true });
+  }
+}
+
+/** This system, as a person names it: the Page cannot tell, as a wsl Place runs Linux. */
+function systemName(): string {
+  const names: Readonly<Record<string, string>> = {
+    linux: 'Linux',
+    win32: 'Windows',
+    darwin: 'macOS',
+  };
+  return `${names[process.platform] ?? process.platform} ${process.arch}`;
+}
+
+/** What the Page says where sherpa-onnx publishes no build that runs on this system. */
+function noDiarizer(release: string): string {
+  return (
+    `sherpa-onnx ${release} offers no diarizer scribe can fetch for ${thisSystem()}: build ` +
+    'sherpa-onnx-offline-speaker-diarization from https://github.com/k2-fsa/sherpa-onnx, put ' +
+    `it in one directory with the two models, named ${SEGMENTATION_MODEL} and ` +
+    `${EMBEDDING_MODEL}, as scribe's README says, and set SCRIBE_DIARIZER to that directory ` +
+    'where the Host is started.'
+  );
 }
 
 /** What the Page says where whisper.cpp publishes no build for this system. */
@@ -316,6 +427,8 @@ async function downloadAndVerify(
   const quiet = new AbortController();
   let timer = setTimeout(() => quiet.abort(), idleMs);
   const hash = createHash('sha256');
+  // The view counts every part of a job together; this file's own bytes are counted here.
+  let received = 0;
   const out = await open(into, 'w');
   try {
     let answer: Response;
@@ -329,8 +442,9 @@ async function downloadAndVerify(
       for await (const chunk of answer.body) {
         clearTimeout(timer);
         timer = setTimeout(() => quiet.abort(), idleMs);
+        received += chunk.length;
         progress.received += chunk.length;
-        if (progress.received > source.size) break;
+        if (received > source.size) break;
         hash.update(chunk);
         await out.write(chunk);
       }
@@ -341,7 +455,7 @@ async function downloadAndVerify(
     clearTimeout(timer);
     await out.close();
   }
-  if (progress.received !== source.size || hash.digest('hex') !== source.sha256) {
+  if (received !== source.size || hash.digest('hex') !== source.sha256) {
     throw new Error(
       `${progress.name} from ${source.url} is not the file scribe expects: its SHA-256 does ` +
         'not match.',

@@ -70,5 +70,41 @@
       "sha256": "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69"
     }
   ],
-  "defaultModel": "ggml-small.bin"
+  "defaultModel": "ggml-small.bin",
+  "diarizer": {
+    "release": "1.13.8",
+    "builds": {
+      "win32-x64": {
+        "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-win-x64-static-MT-Release-no-tts.tar.bz2",
+        "size": 238840069,
+        "sha256": "d2ce464a9e28d9128ab1fd15720df6f0e5e19053f725035d630af20a09c17e36",
+        "format": "tar.bz2",
+        "keep": [
+          "sherpa-onnx-v1.13.8-win-x64-static-MT-Release-no-tts/bin/sherpa-onnx-offline-speaker-diarization.exe"
+        ]
+      },
+      "linux-x64": {
+        "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared.tar.bz2",
+        "size": 28156791,
+        "sha256": "c0bdb7907d3a74bba1d55d22bf4d9fa75586cf1530614ebe88a27b9118e015c4",
+        "format": "tar.bz2",
+        "keep": [
+          "sherpa-onnx-v1.13.8-linux-x64-shared/bin/sherpa-onnx-offline-speaker-diarization",
+          "sherpa-onnx-v1.13.8-linux-x64-shared/lib/libonnxruntime.so"
+        ]
+      }
+    },
+    "segmentation": {
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2",
+      "size": 6958444,
+      "sha256": "24615ee884c897d9d2ba09bb4d30da6bb1b15e685065962db5b02e76e4996488",
+      "format": "tar.bz2",
+      "member": "sherpa-onnx-pyannote-segmentation-3-0/model.onnx"
+    },
+    "embedding": {
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx",
+      "size": 29596978,
+      "sha256": "357a834f702b80161e5b981182c038e18553c1f2ca752ed6cec2052365d4129b"
+    }
+  }
 }

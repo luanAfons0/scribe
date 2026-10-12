@@ -2,9 +2,9 @@
  * What scribe is set up with: the settings the operator chooses, and the
  * times and limits that stay in the environment.
  *
- * The operator chooses five: the whisper.cpp executable, its model, the
- * Minutes command, the Worklog Plugin and the calendar's secret iCal address.
- * They are set on the Plugin Page and
+ * The operator chooses six: the whisper.cpp executable, its model, the
+ * Minutes command, the Worklog Plugin, the calendar's secret iCal address and
+ * the diarizer. They are set on the Plugin Page and
  * kept in `settings.json` in the Plugin directory, so they work however the
  * Host was started. The variable of the same name still beats the file, and
  * the file beats the default, which is none. A variable that is set but empty
@@ -18,7 +18,14 @@
  * needs it. Without whisper.cpp or its model no Call records; without the
  * Minutes command a Call still records and only Make Minutes is refused
  * (ADR-0002); without a Worklog Plugin no Entry is sent and nothing is said;
- * without the calendar's address there is no Event, and nothing is said.
+ * without the calendar's address there is no Event, and nothing is said;
+ * without the diarizer the call's sound is not told apart, and nothing is said
+ * (ADR-0007).
+ *
+ * The diarizer is a directory, as `fetch_diarizer` keeps it: sherpa-onnx's
+ * `sherpa-onnx-offline-speaker-diarization` (`.exe` on Windows) and its two
+ * models, `segmentation.onnx` and `embedding.onnx`, side by side. It is set
+ * when all three are there.
  *
  * The calendar's address is a secret: whoever holds it reads the whole
  * calendar (ADR-0006). The settings tools say only whether it is set, and no
@@ -28,8 +35,8 @@
  * for a person, which a test shortens. One that is not a number still ends the
  * Plugin Server at start with a sentence: nobody sets one by accident.
  */
-import { accessSync, constants, statSync } from 'node:fs';
-import { isAbsolute } from 'node:path';
+import { accessSync, constants, statSync, type Stats } from 'node:fs';
+import { isAbsolute, join } from 'node:path';
 import {
   COMMAND_FORM,
   COMMAND_SHAPE,
@@ -57,6 +64,8 @@ export const WORKLOG_VARIABLE = 'SCRIBE_WORKLOG_PLUGIN';
 export const WORKLOG_WAIT_VARIABLE = 'SCRIBE_WORKLOG_WAIT_MS';
 /** How long a download may send nothing before it is given up. */
 export const FETCH_IDLE_VARIABLE = 'SCRIBE_FETCH_IDLE_MS';
+/** The environment variable that names the diarizer directory. */
+export const DIARIZER_VARIABLE = 'SCRIBE_DIARIZER';
 /** The environment variable that holds the calendar's secret iCal address. */
 export const CALENDAR_VARIABLE = 'SCRIBE_CALENDAR_URL';
 /** How often scribe reads the calendar again. */
@@ -129,6 +138,7 @@ export const CHOSEN = [
   'minutesCommand',
   'worklogPlugin',
   'calendarUrl',
+  'diarizer',
 ] as const;
 
 /** The name of one setting the operator chooses. */
@@ -175,6 +185,25 @@ export type SettingsView = { readonly [name in Shown]: SettingView } & {
 /** whisper.cpp, ready to run: the executable and the model it reads. */
 export type Whisper = { readonly program: string; readonly model: string };
 
+/** The diarizer, ready to run: sherpa-onnx's program and the two models it reads. */
+export type Diarizer = {
+  readonly program: string;
+  readonly segmentation: string;
+  readonly embedding: string;
+};
+
+/** The program in a diarizer directory, as this system names it. */
+export const DIARIZER_PROGRAM =
+  process.platform === 'win32'
+    ? 'sherpa-onnx-offline-speaker-diarization.exe'
+    : 'sherpa-onnx-offline-speaker-diarization';
+
+/** The segmentation model in a diarizer directory. */
+export const SEGMENTATION_MODEL = 'segmentation.onnx';
+
+/** The embedding model in a diarizer directory. */
+export const EMBEDDING_MODEL = 'embedding.onnx';
+
 /** The settings the operator chooses, in one running Plugin Server. */
 export type Choices = {
   /** whisper.cpp and its model, or a refusal that names the setting that is missing. */
@@ -187,6 +216,11 @@ export type Choices = {
   worklogPlugin(): string | null;
   /** The calendar's secret iCal address, or null when there is no Event. Never shown. */
   calendarUrl(): string | null;
+  /**
+   * The diarizer, or null when none is set: then the call's sound is not told
+   * apart. One that is set and not whole is refused with its sentence.
+   */
+  diarizer(): Diarizer | null;
   /** Every setting, as the settings tools tell them. */
   view(): SettingsView;
   /** Keep the given settings in the file, or refuse every one with a sentence. */
@@ -281,6 +315,17 @@ const SPECS: { readonly [name in Chosen]: Spec } = {
     form: webAddress,
     check: null,
   },
+  diarizer: {
+    variable: DIARIZER_VARIABLE,
+    label: 'the diarizer',
+    shape: 'the absolute path of the diarizer directory',
+    json: false,
+    secret: false,
+    form: absolutePath,
+    check: (spec, setting) => (setting.value === null && setting.unread === null
+      ? null
+      : diarizerIn(spec, setting)),
+  },
 };
 
 /** One thing for each setting, made by name. */
@@ -291,6 +336,7 @@ function each<T>(make: (name: Chosen) => T): { readonly [name in Chosen]: T } {
     minutesCommand: make('minutesCommand'),
     worklogPlugin: make('worklogPlugin'),
     calendarUrl: make('calendarUrl'),
+    diarizer: make('diarizer'),
   };
 }
 
@@ -403,6 +449,12 @@ export function openChoices(
       return typeof setting.value === 'string' ? setting.value : null;
     },
 
+    diarizer: () => {
+      const setting = given('diarizer');
+      if (setting.value === null && setting.unread === null) return null;
+      return diarizerIn(SPECS.diarizer, setting);
+    },
+
     view: () => {
       const all = each((name) => {
         const setting = given(name);
@@ -508,6 +560,53 @@ function existingFile(spec: Spec, setting: Given): string {
     );
   }
   return path;
+}
+
+/**
+ * The diarizer in the directory a setting names, or a sentence that says
+ * Speakers are not told apart and names what is missing.
+ */
+function diarizerIn(spec: Spec, setting: Given): Diarizer {
+  const refused = (why: string): Error =>
+    badInput(`The call's sound is not told apart into Speakers: ${why}`);
+  if (setting.unread !== null) throw refused(setting.unread);
+  const directory = String(setting.value);
+  const fix =
+    setting.from === 'environment'
+      ? `change ${spec.variable} where the Host is started`
+      : 'fetch Speakers again in Settings';
+  if (!(statOrNull(directory)?.isDirectory() ?? false)) {
+    throw refused(`${named(spec, setting)} is ${directory}, which is not a directory; ${fix}.`);
+  }
+  const missing = [DIARIZER_PROGRAM, SEGMENTATION_MODEL, EMBEDDING_MODEL].filter(
+    (name) => !(statOrNull(join(directory, name))?.isFile() ?? false),
+  );
+  if (missing.length > 0) {
+    throw refused(
+      `${named(spec, setting)} is ${directory}, which holds no ${missing.join(' and no ')}; ` +
+        `${fix}.`,
+    );
+  }
+  const program = join(directory, DIARIZER_PROGRAM);
+  try {
+    accessSync(program, constants.X_OK);
+  } catch {
+    throw refused(`${program} may not be run; ${fix}.`);
+  }
+  return {
+    program,
+    segmentation: join(directory, SEGMENTATION_MODEL),
+    embedding: join(directory, EMBEDDING_MODEL),
+  };
+}
+
+/** What is at a path, or null when nothing is. */
+function statOrNull(path: string): Stats | null {
+  try {
+    return statSync(path);
+  } catch {
+    return null;
+  }
 }
 
 /** The path of an existing file a setting names, which may be run. */
