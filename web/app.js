@@ -54,6 +54,9 @@ const wholeTranscript = new Set();
 /** How often the page asks again while something is still changing. */
 const POLL_MS = 2000;
 
+/** How often the list asks again while an Event is coming, so its banner shows in time. */
+const EVENT_POLL_MS = 15_000;
+
 /** The Call this tab records, while it records one. */
 let capture = null;
 
@@ -99,6 +102,7 @@ function shownId() {
   return found ? Number(found[1]) : null;
 }
 
+/** The list of Calls, and the Event that starts next. Answers whether an Event is coming. */
 async function showList() {
   const listed = await call('list_calls');
   callList.replaceChildren(
@@ -134,6 +138,7 @@ async function showList() {
   setupNote.hidden = problem === null;
   setupText.textContent = problem || '';
   if (problem !== null) startButton.disabled = true;
+  return drawUpcoming();
 }
 
 /** One Call, drawn whole. Answers whether it is still changing. */
@@ -143,6 +148,14 @@ async function showCall(id) {
   callTitle.textContent = nameOf(found);
   callMeta.textContent =
     when(found.startedAt) + ' · ' + lengthOf(found) + ' · ' + STATE_WORDS[found.state];
+  // A title the Event gave is said to be the Event's, until the operator
+  // gives one of their own.
+  if (found.event !== null && found.title === found.event.name) {
+    const event = document.createElement('span');
+    event.className = 'from-event';
+    event.textContent = 'Event';
+    callMeta.append(' · Title from the ', event);
+  }
   callView.dataset.state = found.state;
   stopButton.hidden = found.state !== 'recording';
   deleteButton.hidden = found.state === 'recording';
@@ -312,19 +325,21 @@ async function show() {
   try {
     const running = await showLive();
     let changing = false;
+    let eventComing = false;
     if (settings) {
       // The Settings view is drawn once when it opens, so a poll never
       // writes over a field being typed in.
       if (!settingsShown) await showSettings();
       settingsShown = true;
     } else if (id === null) {
-      await showList();
+      eventComing = await showList();
       changing = running !== null;
     } else {
       changing = await showCall(id);
     }
     say(null);
     if (changing || running !== null) timer = setTimeout(show, POLL_MS);
+    else if (eventComing) timer = setTimeout(show, EVENT_POLL_MS);
   } catch (fault) {
     say(fault);
     timer = setTimeout(show, POLL_MS * 2);
@@ -434,6 +449,7 @@ moreLines.addEventListener('click', () => {
 });
 
 startButton.addEventListener('click', start);
+byId('upcoming-start').addEventListener('click', start);
 makeButton.addEventListener('click', makeMinutes);
 sendButton.addEventListener('click', sendToWorklog);
 stopButton.addEventListener('click', () => stop(shownId()));

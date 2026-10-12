@@ -15,6 +15,7 @@ import { readDownloads } from './downloads.ts';
 import { fetcherFor } from './fetcher.ts';
 import { sentenceFor, serve } from './mcp.ts';
 import { minutesMakerFor, type MinutesMaker } from './minutes-maker.ts';
+import { noticesFor } from './notices.ts';
 import { recorderFor } from './recorder.ts';
 import { endEveryTree } from './run.ts';
 import { openChoices, readSettings } from './settings.ts';
@@ -54,6 +55,7 @@ const recorder = recorderFor(store, transcriber, settings, choices, heard);
 
 const fetcher = fetcherFor(downloads, choices, settings);
 const calendar = calendarFor(choices, settings);
+noticesFor(calendar, settings);
 
 serve(
   toolsFor({ store, recorder, transcriber, maker, sender, choices, fetcher, calendar }),

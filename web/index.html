@@ -23,6 +23,19 @@
   <div id="banner" class="banner" role="alert" hidden></div>
 
   <section id="list-view">
+    <!-- The Event that starts next, drawn by events.js out of what list_events
+         answered: a banner from five minutes before it until it ends, and one
+         line when it is further away. A Notice opens #upcoming. -->
+    <div class="event" id="upcoming" hidden>
+      <div class="event-when"><span id="upcoming-at"></span><small id="upcoming-in"></small></div>
+      <div>
+        <p class="event-name" id="upcoming-name"></p>
+        <p class="event-meta"><span id="upcoming-span"></span>
+          <a id="upcoming-meet" href="#" target="_blank" rel="noopener noreferrer">Open the Meet</a></p>
+      </div>
+      <div class="acts"><button class="act go" id="upcoming-start" type="button">Start a Call</button></div>
+    </div>
+    <p class="next-event" id="next-event" hidden></p>
     <div class="mast">
       <h2 class="section-label">Calls</h2>
       <!-- Chrome's picker opens: choose the call's tab and tick "Also share
@@ -253,6 +266,7 @@
 <script src="capture.js"></script>
 <script src="downloads.js"></script>
 <script src="calendar.js"></script>
+<script src="events.js"></script>
 <script src="settings.js"></script>
 <script src="shortcut.js"></script>
 <script src="app.js"></script>

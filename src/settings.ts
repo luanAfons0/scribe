@@ -61,9 +61,14 @@ export const FETCH_IDLE_VARIABLE = 'SCRIBE_FETCH_IDLE_MS';
 export const CALENDAR_VARIABLE = 'SCRIBE_CALENDAR_URL';
 /** How often scribe reads the calendar again. */
 export const CALENDAR_READ_VARIABLE = 'SCRIBE_CALENDAR_READ_MS';
+/** How long before an Event its Notice goes. */
+export const NOTICE_LEAD_VARIABLE = 'SCRIBE_NOTICE_LEAD_MS';
 
 /** An Event added today gets its Notice if the calendar is read this often. */
 const CALENDAR_READ_MS = 5 * 60_000;
+
+/** A minute is enough to open the call, and not so long that it is forgotten. */
+const NOTICE_LEAD_MS = 60_000;
 
 /** A download that sends nothing for a minute has stalled, not slowed. */
 const FETCH_IDLE_MS = 60_000;
@@ -89,6 +94,8 @@ export type Settings = {
   readonly fetchIdleMs: number;
   /** How often scribe reads the calendar again. */
   readonly calendarReadMs: number;
+  /** How long before an Event its Notice goes. */
+  readonly noticeLeadMs: number;
 };
 
 /** Read the times, or throw a sentence that names the one that is wrong. */
@@ -111,6 +118,7 @@ export function readSettings(env: NodeJS.ProcessEnv = process.env): Settings {
       env[CALENDAR_READ_VARIABLE],
       CALENDAR_READ_MS,
     ),
+    noticeLeadMs: milliseconds(NOTICE_LEAD_VARIABLE, env[NOTICE_LEAD_VARIABLE], NOTICE_LEAD_MS),
   };
 }
 

@@ -136,6 +136,7 @@ These are set in the environment alone:
 | `SCRIBE_WORKLOG_WAIT_MS` | How long scribe waits for Worklog to answer. Default 30000. |
 | `SCRIBE_FETCH_IDLE_MS`   | How long a download may send nothing before it is given up. Default 60000. |
 | `SCRIBE_CALENDAR_READ_MS` | How often scribe reads the calendar again. Default 300000 (5 minutes). |
+| `SCRIBE_NOTICE_LEAD_MS`  | How long before an Event its Notice goes. Default 60000. |
 | `SCRIBE_DOWNLOADS`       | A list of downloads read in place of `src/downloads.json`. Tests point it at a server of their own; an operator has no reason to set it. |
 | `SCRIBE_NODE`            | The Node 24 that `mcp` runs in a `wsl` Place, when `PATH` has none. |
 
@@ -160,7 +161,7 @@ it, which turns Events off. Under it, Settings says when the calendar was
 last read and how many Events it holds, or why the read failed.
 
 scribe reads the address at start, every five minutes, and when you save it.
-It holds the Events in memory, never in `scribe.db`. An Event is an entry
+It holds the Events in memory, not in `scribe.db`. An Event is an entry
 with a Google Meet link, in its conference data or else in its description
 or location. scribe skips an entry that is all day, cancelled, or that you
 declined. The `list_events` tool gives the Events from now to the next day:
@@ -173,6 +174,25 @@ count of times. It also reads a time you removed from the series, and a time
 you moved or cancelled. A time keeps its wall clock in its own time zone, also
 across a change of daylight saving time. scribe skips a rule it cannot read,
 such as a yearly one: it gives no Event rather than one at a guessed time.
+
+A minute before each Event, scribe sends a Notice through FirstMate: the
+Event's name and "in 1 min" as the title, its time and "on Google Meet" as the
+body. Each Event gets one Notice, once. FirstMate takes one Notice from a
+Plugin every 5 s, so two Events at the same time give two Notices, 5 s apart.
+A click on the Notice opens scribe at the Event.
+
+On the Calls list, a banner shows the Event from five minutes before it
+until it ends, with **Open the Meet** and **Start a Call**. Further away, one
+line says the next Event. A calendar that cannot be read sends no Notice:
+Settings says why.
+
+A Call you start from five minutes before an Event until it ends is for
+that Event. It takes the Event's name as its title, as if you gave it with
+**Rename**, so the Minutes do not replace it, and the Call's page says
+"Title from the Event". During two Events at once, the one that started
+last wins. The Call keeps only the Event's name and start, in `scribe.db`:
+never the address and never the Meet link. With no Event in reach, or no
+address, a Call starts with no title, as before.
 
 A Google Workspace admin can turn the secret address off. Then Settings says
 the address answered 404, there are no Events, and scribe records as before.
@@ -214,7 +234,8 @@ and reads the Minutes from its stdout. The rules ask for:
   each;
 - `Decisões` and `Próximos passos` at the end;
 - the language of the Call;
-- a title on the first line, which replaces the date and time in the list;
+- a title on the first line, which replaces the date and time in the list,
+  unless the Call has a title from its Event or from you;
 - the Topics after the Minutes: what the Call talked about and a short
   summary, at most 20 lines. scribe takes them out of the Minutes and keeps
   them apart, for Worklog. A command that leaves them out still gives

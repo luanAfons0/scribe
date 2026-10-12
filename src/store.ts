@@ -84,6 +84,13 @@ const STEPS: readonly string[] = [
   `
   ALTER TABLE calls ADD COLUMN topics_written_at TEXT;
   `,
+  // The Event a Call was started for: its name and its start, and nothing
+  // else of it. The calendar's address and the Meet link are never kept
+  // (ADR-0006). A Call from before this step was started for no Event.
+  `
+  ALTER TABLE calls ADD COLUMN event_name TEXT;
+  ALTER TABLE calls ADD COLUMN event_start TEXT;
+  `,
 ];
 
 /** Open `scribe.db`, and bring it up to the current version. */
