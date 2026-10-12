@@ -320,12 +320,12 @@ test('with no Call recording, the Popup says so, with no button and no link', as
   const empty = /<div class="pop-empty" id="jot-empty"[^>]*>([\s\S]*?)<\/div>/.exec(html);
   assert.ok(empty, 'jot.html has no empty state');
   assert.match(empty[1] ?? '', /No Call is recording/);
-  assert.match(empty[1] ?? '', /scribe’s browser tab/);
+  assert.match(empty[1] ?? '', /scribe’s page in the FirstMate window/);
   // In the Popup, a link to the Host only hides it (FirstMate's popup.ts).
   assert.ok(!/<(?:button|a)\b/.test(empty[1] ?? ''), 'the empty state offers a way out');
 });
 
-test('the Popup never records (ADR-0001)', async () => {
+test('the Popup never records (ADR-0008)', async () => {
   const html = await readFile(join(WEB, 'jot.html'), 'utf8');
   const code = await readFile(join(WEB, 'jot.js'), 'utf8');
 
@@ -333,7 +333,7 @@ test('the Popup never records (ADR-0001)', async () => {
   assert.ok(!/getDisplayMedia|getUserMedia|startCapture|start_call/.test(code));
 });
 
-test("the Call's page reads the Jottings again when its tab gets focus", async () => {
+test("the Call's page reads the Jottings again when it gets focus", async () => {
   const code = await readFile(join(WEB, 'app.js'), 'utf8');
 
   assert.match(code, /window\.addEventListener\('focus', show\)/);

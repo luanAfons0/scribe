@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<!-- The red line: shown while any Call records, whichever tab records it. -->
+<!-- The red line: shown while any Call records, whichever page records it. -->
 <div id="live" class="live" role="status" hidden>
   <span class="live-dot" aria-hidden="true"></span>
   <span id="live-text">Recording</span>
@@ -38,13 +38,14 @@
     <p class="next-event" id="next-event" hidden></p>
     <div class="mast">
       <h2 class="section-label">Calls</h2>
-      <!-- Chrome's picker opens: choose the call's tab and tick "Also share
-           tab audio". The mic is asked for next. -->
+      <!-- The App asks what scribe may capture: any screen or window, whose
+           sound is the call's. The mic is asked for next (ADR-0008). -->
       <button class="act go" id="start" type="button">Start a Call</button>
     </div>
     <p class="hint">
-      Start opens Chrome’s picker: choose the call’s tab and tick
-      “Also share tab audio”. Keep this tab open until you press Stop.
+      Start asks what scribe may capture: choose any screen or window. On
+      Windows the sound of the whole machine comes with it. Keep FirstMate
+      running until you press Stop.
     </p>
     <!-- What scribe needs before a Call can record, when it is missing. -->
     <p class="setup-note" id="setup-note" hidden>
@@ -77,7 +78,7 @@
     </div>
 
     <p class="cut-note" id="cut-note" hidden>
-      This Call was Cut: its tab or its Plugin Server went away before Stop.
+      This Call was Cut: its page or its Plugin Server went away before Stop.
       What Whisper heard until then is kept.
     </p>
 

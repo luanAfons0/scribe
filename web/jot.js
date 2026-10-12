@@ -1,11 +1,11 @@
 /* The Popup: the Jottings of the Call that records, and Stop, in the small
    window FirstMate opens over the call (jot.html). It asks the Plugin Server
    for the Call that records, keeps every change to its Jottings at once, as
-   the Call's page does, and never records (ADR-0001).
+   the Call's page does, and never records (ADR-0008).
 
    FirstMate unloads the Popup each time it hides, so each Shortcut press
    loads this page fresh and reads the Jottings again. While it shows, it
-   asks again every few seconds, so a Call stopped in the tab, or Cut, turns
+   asks again every few seconds, so a Call stopped on the Call's page, or Cut, turns
    into the empty state. */
 'use strict';
 

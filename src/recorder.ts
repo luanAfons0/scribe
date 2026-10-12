@@ -8,8 +8,8 @@
  * track's place is counted in samples, so a line's moment comes from the audio
  * itself and never from a clock.
  *
- * A Call ends without Stop when its page goes away: the tab closed, the
- * browser quit, the machine slept. Then no audio comes, and after
+ * A Call ends without Stop when its page goes away: the FirstMate App quit,
+ * the machine slept. Then no audio comes, and after
  * `SCRIBE_CUT_AFTER_MS` of none the Call is Cut, with what Whisper has heard
  * so far. A Plugin Server that starts and finds a Call still recording has no
  * page sending to it — the page was sending to the one that went away — so

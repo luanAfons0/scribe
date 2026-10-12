@@ -1,7 +1,7 @@
-/* The scribe Plugin Page: the list of Calls, one Call, and the Call this tab
+/* The scribe Plugin Page: the list of Calls, one Call, and the Call this page
    records. Everything it shows, it asks the Plugin Server for; the one thing
    it keeps is the capture of the Call it records, which lives only in this
-   tab (ADR-0001). The address says what is shown: # for the list, #call/7
+   page, in the FirstMate window (ADR-0008). The address says what is shown: # for the list, #call/7
    for one Call, #settings for the Settings view, so a reload shows the same
    thing. */
 'use strict';
@@ -57,7 +57,7 @@ const POLL_MS = 2000;
 /** How often the list asks again while an Event is coming, so its banner shows in time. */
 const EVENT_POLL_MS = 15_000;
 
-/** The Call this tab records, while it records one. */
+/** The Call this page records, while it records one. */
 let capture = null;
 
 /** The Jottings box, which follows the Call shown. */
@@ -303,7 +303,7 @@ async function showLive() {
   if (running !== null) {
     liveText.textContent =
       'Recording ' + nameOf(running) + ' · ' + lengthOf(running) +
-      (capture !== null && capture.id === running.id ? '' : ' (in another tab)');
+      (capture !== null && capture.id === running.id ? '' : ' (on another page)');
     live.dataset.id = String(running.id);
   }
   return running;
@@ -359,13 +359,13 @@ async function start() {
     });
     location.hash = '#call/' + capture.id;
   } catch (fault) {
-    // Closing the picker is a choice, not a fault.
+    // Refusing the capture is a choice, not a fault.
     if (fault.name !== 'NotAllowedError') say(fault);
   }
   show();
 }
 
-/** Stop the Call that records: through this tab's capture, when it has it. */
+/** Stop the Call that records: through this page's capture, when it has it. */
 async function stop(id) {
   try {
     if (capture !== null && capture.id === id) await capture.stop();
@@ -455,6 +455,6 @@ sendButton.addEventListener('click', sendToWorklog);
 stopButton.addEventListener('click', () => stop(shownId()));
 liveStop.addEventListener('click', () => stop(Number(live.dataset.id)));
 window.addEventListener('hashchange', show);
-// The Popup may have changed the Jottings while this tab had no focus.
+// The Popup may have changed the Jottings while this page had no focus.
 window.addEventListener('focus', show);
 show();

@@ -1,13 +1,13 @@
 # scribe
 
-A FirstMate Plugin that records a call in a browser tab, writes down what was
-said, and makes the Minutes from what you typed during it. It keeps the text,
+A FirstMate Plugin that records a call from the FirstMate window, writes down
+what was said, and makes the Minutes from what you typed during it. It keeps the text,
 never the audio: each chunk of audio is deleted as soon as Whisper has read
 it.
 
 Read [`CONTEXT.md`](CONTEXT.md) for the words this project uses — Call,
 Jottings, Transcript, Minutes, Cut — and [`docs/adr/`](docs/adr) for why a Call
-is recorded in a browser tab and why the Minutes come from a command.
+is recorded in the FirstMate window and why the Minutes come from a command.
 
 ## What it needs
 
@@ -22,8 +22,9 @@ is recorded in a browser tab and why the Minutes come from a command.
   the CPU. scribe fetches both from its Plugin Page when you ask, on Windows
   and on Linux, x64 and arm64. You can also build whisper.cpp yourself. On
   Windows the executable is `whisper-cli.exe`.
-- **Chrome or Edge**, for the tab that records the Call. Firefox and Safari
-  cannot share a tab's audio.
+- **The FirstMate App on Windows**, to record a Call. scribe records in the
+  App's window, and the App gives a capture its sound on Windows only. On
+  Linux, scribe runs, but it refuses to start a Call (see "Record a Call").
 
 ### Get whisper.cpp from the Plugin Page
 
@@ -200,19 +201,32 @@ A calendar that cannot be read never stops a Call.
 
 ## Record a Call
 
-1. Open scribe's Plugin Page in Chrome or Edge. In the FirstMate window,
-   *open in browser* in the strip does that, already admitted.
-2. Press **Start a Call**. Chrome's picker opens: choose the call's tab (a
-   Meet tab, say) and tick **Also share tab audio**. The page asks for the mic
-   next.
+1. Open scribe's Plugin Page in the FirstMate window. The call itself can run
+   in any app: Google Meet in a browser, or the Zoom or Teams app.
+2. Press **Start a Call**. The first time, the App asks whether scribe may
+   capture your screen or a window, and whether it may use the microphone. It
+   keeps both answers for scribe. Then it asks "What may scribe capture?", with
+   one button for each screen and window: choose any of them. On Windows the
+   capture brings the sound of the whole machine with it, so scribe hears the
+   call whatever you choose.
 3. A red line shows at the top of the page while the Call records, and the
    Transcript grows on the Call's page as Whisper reads the audio, about every
-   30 seconds. Lines from your mic are `Você`; lines from the tab are `Outros`.
-4. Press **Stop**, or *Stop sharing* in Chrome's bar. Whisper reads what is
-   left.
+   30 seconds. Lines from your mic are `Você`; lines from the call's sound are
+   `Outros`.
+4. Press **Stop**. Whisper reads what is left.
 
-Keep the recording tab open until you press Stop. Only one Call records at a
+You can switch to another Plugin or hide the window: the Call continues to
+record. Keep the App running until you press Stop. Only one Call records at a
 time; a second Start is refused with a sentence that names the running one.
+
+On Windows the capture takes every sound the machine plays, not only the
+call. Words from a video or a song that plays during the Call can show up as
+`Outros` lines.
+
+On Linux the App gives a capture with no sound (FirstMate ADR-0026). So scribe
+refuses to start a Call there: after you choose what to capture, it says that
+the capture brought no sound, and it does not record the mic alone. Record from
+the App on Windows (ADR-0008).
 
 v1 assumes headphones. On speakers, the mic hears the other people too, and
 their words can show up as `Você` lines as well as `Outros` ones.
@@ -358,7 +372,7 @@ Minutes keep your headings in your order.
 
 ### The Popup
 
-The Popup lets you write the Jottings without leaving the call's tab. Bind a
+The Popup lets you write the Jottings without leaving the call. Bind a
 Shortcut to scribe's `jot.html` once, in a terminal:
 
 ```
@@ -370,15 +384,15 @@ Call, press the Shortcut: FirstMate opens the Popup over the call. It shows
 the whole Jottings of the Call that records, and **Stop**. Every change is kept
 at once, so the Popup loses nothing when it hides. **Esc** hides it, and so
 does a click back into the call. The Call's page reads the Jottings again when
-its tab gets focus, so the two never write an old copy over each other.
+it gets focus, so the two never write an old copy over each other.
 
-The Popup never records: a Call records only in a browser tab (ADR-0001). With
-no Call recording, the Popup says so, and says to start one in scribe's tab.
+The Popup never records: a Call records only on scribe's page in the
+FirstMate window (ADR-0008). With no Call recording, the Popup says so, and
+says to start one there.
 
 ### A Cut Call
 
-When the recording tab closes, the browser quits or the machine sleeps, no
-audio comes. After `SCRIBE_CUT_AFTER_MS` of none (a minute), the Call is
+When the App quits or the machine sleeps during a Call, no audio comes. After `SCRIBE_CUT_AFTER_MS` of none (a minute), the Call is
 **Cut**: it keeps its Transcript so far and shows as Cut in the list. The same
 happens when the Plugin Server stops during a Call: the next time it starts,
 it marks that Call Cut and gives the audio it left to Whisper. A new Call can

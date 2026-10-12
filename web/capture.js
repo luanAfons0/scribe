@@ -1,13 +1,15 @@
-/* Recording a Call in this tab (ADR-0001): the call's tab and its audio from
-   Chrome's picker, the mic from the browser, both as 16 kHz mono, each sent
+/* Recording a Call on this page, in the FirstMate window (ADR-0008): a
+   capture and its sound, from the screen or window the operator chooses in
+   the App's dialog, and the mic, both as 16 kHz mono, each sent
    to the Plugin Server in chunks of about five seconds, in order, as they are
    made. It defines one global: startCapture(hooks) → a Capture.
 
-   The picker comes first, then the mic, and only then is the Call started,
-   so a cancelled picker leaves no Call behind. A chunk that cannot be sent is
+   The capture comes first, then the mic, and only then is the Call started,
+   so a refused capture leaves no Call behind. A chunk that cannot be sent is
    tried again until it goes, so a Host that blinks loses no audio. When the
    Plugin Server says the Call no longer records — it was stopped from
-   another tab, or it was Cut — this tab lets go of the tab and the mic. */
+   another page, or it was Cut — this page lets go of the capture and the
+   mic. */
 'use strict';
 
 (function () {
@@ -28,13 +30,13 @@
   const pause = (ms) => new Promise((done) => setTimeout(done, ms));
 
   /**
-   * Ask for the tab and the mic, start a Call, and send its audio. hooks.onEnd
-   * is told once, when this tab stops recording for any reason, with a
+   * Ask for the capture and the mic, start a Call, and send its audio.
+   * hooks.onEnd is told once, when this page stops recording for any reason, with a
    * sentence when the reason is a fault. Resolves to { id, stop() }.
    */
   async function startCapture(hooks) {
-    // Made now, while the click on Start still counts: Chrome starts an
-    // AudioContext made after the picker and the mic prompt suspended, and a
+    // Made now, while the click on Start still counts: Chromium starts an
+    // AudioContext made after the App's dialogs and the mic prompt suspended, and a
     // suspended one takes in no audio at all.
     const context = new AudioContext({ sampleRate: RATE });
     let display;
@@ -57,11 +59,13 @@
       if (context.state !== 'closed') context.close();
     };
 
+    // The FirstMate App gives a capture its sound on Windows only. On
+    // Linux it gives none, and no Call starts (ADR-0008).
     if (display.getAudioTracks().length === 0) {
       letGo();
       throw new Error(
-        'Chrome shared no audio. Start again, choose the call’s tab, and tick ' +
-          '“Also share tab audio”.',
+        'The capture brought no sound, so scribe cannot hear the call. The ' +
+          'FirstMate App gives a capture its sound on Windows only.',
       );
     }
 
@@ -77,7 +81,7 @@
       });
     } catch (fault) {
       letGo();
-      throw new Error('The browser would not give this page the mic: ' + fault.message);
+      throw new Error('FirstMate would not give scribe the mic: ' + fault.message);
     }
     release.push(mic);
 
@@ -198,7 +202,7 @@
       return ending;
     }
 
-    // "Stop sharing" in Chrome's bar, or the call's tab closing, ends it too.
+    // A capture that ends on its own, as when its window closes, ends it too.
     display.getTracks().forEach((track) => track.addEventListener('ended', () => stop()));
 
     return { id: id, stop: stop };

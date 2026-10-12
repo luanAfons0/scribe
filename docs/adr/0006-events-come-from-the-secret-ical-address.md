@@ -6,9 +6,10 @@ format", which the operator pastes into Settings, and nothing else. scribe
 holds no OAuth client and no token, as it holds no key for a model
 (ADR-0002).
 
-Only an Event with a Google Meet link counts: scribe records a call in a
-browser tab (ADR-0001), and an Event with no link, or one held in another
-app, has nothing to record.
+Only an Event with a Google Meet link counts. When this was decided, scribe
+recorded a call only in a browser tab (ADR-0001), so an Event with no link,
+or one held in another app, had nothing to record. A Call now records from
+any app on Windows (ADR-0008), but the Events stay Meet-only for now.
 
 ## Considered Options
 

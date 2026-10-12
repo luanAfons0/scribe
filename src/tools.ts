@@ -104,7 +104,7 @@ export function toolsFor(parts: Parts): readonly Tool[] {
       name: 'append_audio',
       description:
         'Keep one chunk of the audio of the Call that records: 16 kHz mono 16-bit PCM, as ' +
-        'base64, from the mic or from the shared tab. Chunks of a track are numbered from 0.',
+        'base64, from the mic or from the call\'s sound. Chunks of a track are numbered from 0.',
       inputSchema: {
         type: 'object',
         properties: {

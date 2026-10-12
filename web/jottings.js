@@ -1,12 +1,12 @@
 /* The Jottings box. Every change is sent to the Plugin Server a moment after
    the typing pauses, one save after another in order, and at once when the
-   box or the window loses focus, so a tab that closes loses nothing. It
+   box or the window loses focus, so a page that closes loses nothing. It
    defines one global: keepJottings(box, onFault) → { mark, show, save }.
 
    The Call's page and the Popup each have a box for the same Jottings, and
    only one has focus at a time. So a box takes the Plugin Server's text
    whenever it holds no change of its own, even while it has focus: that is
-   how an edit made in the Popup shows in the tab. A read asked for before a
+   how an edit made in the Popup shows on the Call's page. A read asked for before a
    save ended may hold the text from before that save, so it is dropped. */
 'use strict';
 

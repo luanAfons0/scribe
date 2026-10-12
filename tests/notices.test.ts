@@ -28,7 +28,7 @@ const HOUR = 60 * MINUTE;
 const NOTICE = 'firstmate/notice';
 
 /** The second sentence of every Notice's body, as the mock words it. */
-const RECORD_IT = 'To record it, open scribe in your browser.';
+const RECORD_IT = 'To record it, start a Call in scribe.';
 
 /** A time as iCal writes it in UTC: 20261012T140000Z. */
 function utc(ms: number): string {

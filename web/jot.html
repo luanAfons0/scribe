@@ -10,8 +10,8 @@
 </head>
 <!-- The Popup: what FirstMate opens over the call when the operator presses
      the Shortcut bound to jot.html. It shows the Jottings of the Call that
-     records, and Stop. It never records: a Call records in scribe's browser
-     tab (ADR-0001). Drawn by jot.js. -->
+     records, and Stop. It never records: a Call records on scribe's page in
+     the FirstMate window (ADR-0008). Drawn by jot.js. -->
 <body class="pop">
 <div class="pop-head" id="jot-live" hidden>
   <span class="pop-dot" aria-hidden="true"></span>
@@ -24,10 +24,10 @@
     placeholder="Type as the call goes. A line that starts with # is a heading."></textarea>
 </div>
 <!-- No button and no link here: in the Popup, a link to the Host only hides
-     the Popup, and FirstMate gives it no way to a browser. -->
+     the Popup. It does not open scribe in the FirstMate window. -->
 <div class="pop-empty" id="jot-empty" hidden>
   <h2>No Call is recording</h2>
-  <p>A Call records in scribe’s browser tab. Start one there, then press the Shortcut again to write.</p>
+  <p>A Call records on scribe’s page in the FirstMate window. Start one there, then press the Shortcut again to write.</p>
 </div>
 <div class="pop-foot">
   <span id="jot-said" role="status"></span>

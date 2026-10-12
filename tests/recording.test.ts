@@ -1,5 +1,5 @@
 /**
- * A Call records the mic and the shared tab, and Whisper makes its Transcript
+ * A Call records the mic and the call's sound, and Whisper makes its Transcript
  * as it goes: every line labelled `Você` or `Outros`, in time order, and no
  * audio kept once Whisper has read it.
  */

@@ -1,7 +1,7 @@
 /* An AudioWorklet that turns one track into chunks of 16-bit PCM of about
    five seconds, and posts each to the page. It runs on the audio thread, which
-   the browser does not slow down in a background tab, so the chunks keep
-   coming while the call's own tab is in front. "flush" posts what is left,
+   Chromium does not slow down for a page that is not shown, so the chunks
+   keep coming while the call's own app is in front. "flush" posts what is left,
    then "flushed". */
 'use strict';
 

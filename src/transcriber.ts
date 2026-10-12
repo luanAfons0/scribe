@@ -148,7 +148,7 @@ function parse(stdout: string): readonly Heard[] {
 /**
  * Whether a line Whisper wrote has speech under it. Only the mic is checked:
  * it carries the room between your words, and Whisper reads the room as
- * words. A line on the tab is the call itself.
+ * words. A line on the tab track is the call itself.
  */
 function heardOn(window: Window, line: Heard): boolean {
   return window.track !== 'mic' || spokenBetween(window, line.startMs, line.endMs);
