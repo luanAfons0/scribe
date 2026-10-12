@@ -166,6 +166,14 @@ or location. scribe skips an entry that is all day, cancelled, or that you
 declined. The `list_events` tool gives the Events from now to the next day:
 the name, the start, the end and the Meet link of each, and nothing else.
 
+A recurring entry, such as a weekly 1:1 or a daily stand-up, gives each of
+its times. scribe reads a rule as Google writes it: daily, weekly or monthly,
+on given weekdays or days of the month, every so many, until a date or for a
+count of times. It also reads a time you removed from the series, and a time
+you moved or cancelled. A time keeps its wall clock in its own time zone, also
+across a change of daylight saving time. scribe skips a rule it cannot read,
+such as a yearly one: it gives no Event rather than one at a guessed time.
+
 A Google Workspace admin can turn the secret address off. Then Settings says
 the address answered 404, there are no Events, and scribe records as before.
 A calendar that cannot be read never stops a Call.

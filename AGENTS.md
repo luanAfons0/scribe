@@ -94,7 +94,10 @@ src/           the Plugin Server. Every file is one job.
                Topics, and why it was not sent, when it was not.
   ical.ts      the iCal text, read by scribe's own reader: unfolded lines,
                properties, and times through Intl (ADR-0006).
-  events.ts    which entries of the feed are Events, and when each happens.
+  events.ts    which entries of the feed are Events, and when each happens:
+               moved, cancelled and removed times of a series included.
+  recurrence.ts an RRULE as Google writes it, expanded in wall time; a rule
+               it cannot read gives no Event (ADR-0006).
   calendar.ts  the calendar's secret address, read now and every few
                minutes; the Events, held in memory; the last read's result.
   bus.ts       the Tool Bus, from this end of the pipe: ask the Host to call

@@ -442,3 +442,240 @@ test('SCRIBE_CALENDAR_URL beats the file; one not in its form is ignored, unshow
   assert.ok(!JSON.stringify(ignored).includes(SECRET));
   assert.ok(![...wrong.lines(), wrong.output()].join('\n').includes(SECRET));
 });
+
+const DAY = 24 * HOUR;
+
+/** The two letters iCal names a weekday by, for the UTC day of `ms`. */
+function weekday(ms: number): string {
+  return ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][new Date(ms).getUTCDay()] ?? '';
+}
+
+/** An instant to the second, as list_events tells it. */
+function iso(ms: number): string {
+  return new Date(Math.floor(ms / 1000) * 1000).toISOString();
+}
+
+test('a weekly Event with BYDAY gives its next time, and none after UNTIL', async (t) => {
+  const start = Date.now() + HOUR;
+  const link = 'X-GOOGLE-CONFERENCE:https://meet.google.com/abc-defg-hij';
+  // The first time is two days before the weekday the test looks for, three
+  // weeks ago: only BYDAY brings the series to today's weekday.
+  const first = start - 3 * 7 * DAY - 2 * DAY;
+  const weekly = `RRULE:FREQ=WEEKLY;BYDAY=${weekday(first)},${weekday(start)}`;
+  const { plugin } = await withFeed(t, {
+    [FEED]: feed(
+      timed('one@google.com', '1:1', first, link, `${weekly};UNTIL=${utc(start + 7 * DAY)}`),
+      timed('ended@google.com', 'Ended', first, link, `${weekly};UNTIL=${utc(start - DAY)}`),
+    ),
+  });
+
+  const found = await eventsUntil(plugin, (listed) => listed.length > 0);
+
+  assert.deepEqual(
+    found.map((event) => [event.name, event.start, event.end]),
+    [['1:1', iso(start), iso(start + HOUR)]],
+  );
+});
+
+test('COUNT and INTERVAL are kept; a daily and a monthly rule give their time', async (t) => {
+  const start = Date.now() + HOUR;
+  const link = 'X-GOOGLE-CONFERENCE:https://meet.google.com/abc-defg-hij';
+  const date = new Date(start);
+  // The same day of the month, four years ago, is a day every month of that
+  // year that has it, and Feb 29 too.
+  const yearsAgo = Date.UTC(
+    date.getUTCFullYear() - 4,
+    date.getUTCMonth(),
+    date.getUTCDate(),
+    date.getUTCHours(),
+    date.getUTCMinutes(),
+    date.getUTCSeconds(),
+  );
+  // The same numbered weekday of a month before, as "the second Tuesday".
+  const nth = Math.ceil(date.getUTCDate() / 7);
+  let sameNth = start - 5 * 7 * DAY;
+  while (Math.ceil(new Date(sameNth).getUTCDate() / 7) !== nth) sameNth -= 7 * DAY;
+  const daily = 'RRULE:FREQ=DAILY';
+  const { plugin } = await withFeed(t, {
+    [FEED]: feed(
+      timed('daily@google.com', 'Daily', start - 10 * DAY, link, 'RRULE:FREQ=DAILY'),
+      timed('two@google.com', 'Every 2 days', start - 4 * DAY, link, `${daily};INTERVAL=2`),
+      timed('off@google.com', 'Off day', start - 3 * DAY, link, `${daily};INTERVAL=2`),
+      timed('six@google.com', 'Sixth time', start - 5 * DAY, link, 'RRULE:FREQ=DAILY;COUNT=6'),
+      timed('five@google.com', 'Five times', start - 5 * DAY, link, 'RRULE:FREQ=DAILY;COUNT=5'),
+      timed('month@google.com', 'Monthly', yearsAgo, link, 'RRULE:FREQ=MONTHLY'),
+      timed(
+        'nth@google.com',
+        'Monthly by weekday',
+        sameNth,
+        link,
+        `RRULE:FREQ=MONTHLY;BYDAY=${nth}${weekday(start)}`,
+      ),
+      timed(
+        'fortnight@google.com',
+        'Off week',
+        start - 7 * DAY,
+        link,
+        `RRULE:FREQ=WEEKLY;WKST=SU;INTERVAL=2;BYDAY=${weekday(start)}`,
+      ),
+    ),
+  });
+
+  const found = await eventsUntil(plugin, (listed) => listed.length > 0);
+
+  assert.deepEqual(
+    found.map((event) => event.name).sort(),
+    ['Daily', 'Every 2 days', 'Monthly', 'Monthly by weekday', 'Sixth time'],
+  );
+  assert.deepEqual(new Set(found.map((event) => event.start)), new Set([iso(start)]));
+});
+
+test('an EXDATE takes its time out; a RECURRENCE-ID moves it, or cancels it', async (t) => {
+  const start = Math.floor((Date.now() + HOUR) / MINUTE) * MINUTE;
+  const link = 'X-GOOGLE-CONFERENCE:https://meet.google.com/abc-defg-hij';
+  // São Paulo is UTC-3 all year: its wall time is known from the test's own now.
+  const wall = (ms: number): string => utc(ms - 3 * HOUR).replace('Z', '');
+  const zone = 'TZID=America/Sao_Paulo';
+  const zoned = (uid: string, name: string, at: number, ...more: readonly string[]): string =>
+    vevent(
+      `UID:${uid}`,
+      `DTSTART;${zone}:${wall(at)}`,
+      `DTEND;${zone}:${wall(at + HOUR)}`,
+      `SUMMARY:${name}`,
+      link,
+      ...more,
+    );
+  const { plugin } = await withFeed(t, {
+    [FEED]: feed(
+      // The moved time comes before its Series in the feed, as Google may write it.
+      zoned('moved@google.com', 'Moved', start + 2 * HOUR, `RECURRENCE-ID;${zone}:${wall(start)}`),
+      zoned('moved@google.com', 'Moved', start - 5 * DAY, 'RRULE:FREQ=DAILY'),
+      zoned(
+        'excluded@google.com',
+        'Excluded',
+        start - 5 * DAY,
+        'RRULE:FREQ=DAILY',
+        `EXDATE;${zone}:${wall(start - DAY)},${wall(start)}`,
+      ),
+      zoned('cancelled@google.com', 'Cancelled', start - 5 * DAY, 'RRULE:FREQ=DAILY'),
+      zoned(
+        'cancelled@google.com',
+        'Cancelled',
+        start,
+        `RECURRENCE-ID;${zone}:${wall(start)}`,
+        'STATUS:CANCELLED',
+      ),
+      zoned(
+        'kept@google.com',
+        'Kept',
+        start - 5 * DAY,
+        'RRULE:FREQ=DAILY',
+        `EXDATE;${zone}:${wall(start - DAY)}`,
+      ),
+    ),
+  });
+
+  const found = await eventsUntil(plugin, (listed) => listed.length > 0);
+
+  assert.deepEqual(
+    found.map((event) => [event.name, event.start, event.end]),
+    [
+      ['Kept', iso(start), iso(start + HOUR)],
+      ['Moved', iso(start + 2 * HOUR), iso(start + 3 * HOUR)],
+    ],
+  );
+});
+
+test('a TZID keeps the wall time of a weekly Event across daylight saving time', async (t) => {
+  const start = Math.floor((Date.now() + HOUR) / MINUTE) * MINUTE;
+  const link = 'X-GOOGLE-CONFERENCE:https://meet.google.com/abc-defg-hij';
+  const zone = 'America/New_York';
+  const format = new Intl.DateTimeFormat('en-US', {
+    timeZone: zone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+  });
+  /** The wall time in New York of an instant, as numbers. */
+  const wallIn = (ms: number): Record<string, number> =>
+    Object.fromEntries(
+      format.formatToParts(new Date(ms)).map((part) => [part.type, Number(part.value)]),
+    );
+  const at = wallIn(start);
+  // Some weeks back, the same instant has another hour in New York: the
+  // first time is on the other side of a change of daylight saving time.
+  let weeks = 1;
+  while (wallIn(start - weeks * 7 * DAY)['hour'] === at['hour']) weeks += 1;
+  // The first time is the same wall time, that many weeks back on the wall calendar.
+  const firstDay = new Date(
+    Date.UTC(at['year'] ?? 0, (at['month'] ?? 0) - 1, (at['day'] ?? 0) - weeks * 7),
+  );
+  const two = (number: number | undefined): string => String(number).padStart(2, '0');
+  const wall =
+    `${firstDay.getUTCFullYear()}${two(firstDay.getUTCMonth() + 1)}${two(firstDay.getUTCDate())}` +
+    `T${two(at['hour'])}${two(at['minute'])}00`;
+  const { plugin } = await withFeed(t, {
+    [FEED]: feed(
+      vevent(
+        'UID:stand-up@google.com',
+        `DTSTART;TZID=${zone}:${wall}`,
+        'SUMMARY:Stand-up',
+        link,
+        'RRULE:FREQ=WEEKLY',
+      ),
+    ),
+  });
+
+  const found = await eventsUntil(plugin, (listed) => listed.length > 0);
+
+  assert.deepEqual(found.map((event) => [event.name, event.start]), [['Stand-up', iso(start)]]);
+});
+
+test('a rule scribe does not read gives no Event, not a guessed one', async (t) => {
+  const start = Date.now() + HOUR;
+  const link = 'X-GOOGLE-CONFERENCE:https://meet.google.com/abc-defg-hij';
+  const unread = [
+    'RRULE:FREQ=YEARLY',
+    'RRULE:FREQ=HOURLY',
+    `RRULE:FREQ=WEEKLY;BYDAY=${weekday(start)};BYSETPOS=1`,
+    `RRULE:FREQ=WEEKLY;BYDAY=2${weekday(start)}`,
+    'RRULE:FREQ=DAILY;COUNT=0',
+    'RRULE:FREQ=DAILY;INTERVAL=two',
+    `RRULE:FREQ=DAILY;COUNT=3;UNTIL=${utc(start + DAY)}`,
+  ];
+  const { plugin } = await withFeed(t, {
+    [FEED]: feed(
+      ...unread.map((rule, at) => timed(`unread-${at}@google.com`, rule, start, link, rule)),
+      timed('read@google.com', 'Read', start + HOUR, link, 'RRULE:FREQ=DAILY'),
+    ),
+  });
+
+  const found = await eventsUntil(plugin, (listed) => listed.length > 0);
+
+  assert.deepEqual(found.map((event) => event.name), ['Read']);
+});
+
+test('a rule that never comes back gives no time, and list_events answers', async (t) => {
+  const start = Date.now() + HOUR;
+  const link = 'X-GOOGLE-CONFERENCE:https://meet.google.com/abc-defg-hij';
+  const { plugin } = await withFeed(t, {
+    [FEED]: feed(
+      // Every twelfth month from a February is a February, which has no 30th.
+      timed(
+        'never@google.com',
+        'Never',
+        Date.UTC(2020, 1, 1, 12),
+        link,
+        'RRULE:FREQ=MONTHLY;INTERVAL=12;BYMONTHDAY=30',
+      ),
+      timed('read@google.com', 'Read', start, link),
+    ),
+  });
+
+  const found = await eventsUntil(plugin, (listed) => listed.length > 0);
+
+  assert.deepEqual(found.map((event) => event.name), ['Read']);
+});

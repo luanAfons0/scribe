@@ -31,9 +31,31 @@ export type Calendar = {
   readonly events: readonly Component[];
 };
 
-/** A time an iCal line gives: an instant, or a day with no time, which is all day. */
+/** A wall time: the date and the clock, with no time zone. */
+export type Wall = {
+  readonly year: number;
+  /** From 1 to 12. */
+  readonly month: number;
+  readonly day: number;
+  readonly hour: number;
+  readonly minute: number;
+  readonly second: number;
+};
+
+/**
+ * Where a wall time is read: 'UTC' for a time with a Z, an IANA time zone for
+ * one with a TZID, and null for a time that floats, read where scribe runs.
+ */
+export type Zone = string | null;
+
+/**
+ * A time an iCal line gives: an instant, with the wall time and the zone it
+ * was written in, or a day with no time, which is all day. A recurring rule
+ * repeats the wall time, so the zone's change of daylight saving time does
+ * not move it.
+ */
 export type When =
-  | { readonly kind: 'time'; readonly ms: number }
+  | { readonly kind: 'time'; readonly ms: number; readonly wall: Wall; readonly zone: Zone }
   | { readonly kind: 'date'; readonly year: number; readonly month: number; readonly day: number };
 
 /**
@@ -97,16 +119,20 @@ export function whenOf(property: Property): When | null {
   const [year, month, day, hour, minute, second] = time.slice(1, 7).map(Number) as [
     number, number, number, number, number, number,
   ];
-  if (time[7] === 'Z') {
-    return { kind: 'time', ms: Date.UTC(year, month - 1, day, hour, minute, second) };
-  }
-  const zone = property.params['TZID'];
+  const wall = { year, month, day, hour, minute, second };
   // A time with no zone floats: it is the same wall time wherever it is read.
-  if (zone === undefined) {
-    return { kind: 'time', ms: new Date(year, month - 1, day, hour, minute, second).getTime() };
-  }
+  const zone = time[7] === 'Z' ? 'UTC' : (property.params['TZID'] ?? null);
+  const ms = instantOf(wall, zone);
+  return ms === null ? null : { kind: 'time', ms, wall, zone };
+}
+
+/** The instant a wall time is in a zone, or null when `Intl` knows no such zone. */
+export function instantOf(wall: Wall, zone: Zone): number | null {
+  const { year, month, day, hour, minute, second } = wall;
+  if (zone === 'UTC') return Date.UTC(year, month - 1, day, hour, minute, second);
+  if (zone === null) return new Date(year, month - 1, day, hour, minute, second).getTime();
   try {
-    return { kind: 'time', ms: wallTimeIn(zone, year, month, day, hour, minute, second) };
+    return wallTimeIn(zone, year, month, day, hour, minute, second);
   } catch {
     return null;
   }
