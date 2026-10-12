@@ -1,4 +1,13 @@
+---
+status: superseded by ADR-0008
+---
+
 # A Call is recorded in a browser tab
+
+Superseded by
+[ADR-0008](0008-a-call-is-recorded-in-the-firstmate-window.md): a Call now
+records in the FirstMate window, from any app on Windows. The text below is
+the decision as it was made, and is kept unchanged.
 
 A Call is recorded by scribe's Plugin Page open in a Chromium browser tab.
 The page asks for the call's tab with its audio (`getDisplayMedia`) and for

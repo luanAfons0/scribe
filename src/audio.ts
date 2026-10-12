@@ -4,7 +4,7 @@
  * its end so that no word is cut in two.
  *
  * The page sends 16 kHz mono PCM, 16 bits a sample, one track at a time
- * (ADR-0001). A chunk file is named by its Call, its track and the sample it
+ * (ADR-0008). A chunk file is named by its Call, its track and the sample it
  * starts at, counted from the start of the Call in that track's own audio, so
  * what waits for Whisper can be read off the directory alone. No audio is kept
  * longer than it takes Whisper to read it: the chunks of a window are deleted
@@ -16,7 +16,7 @@ import { join } from 'node:path';
 /** Where audio waits for Whisper, relative to the Plugin directory. */
 export const AUDIO = 'audio';
 
-/** The one audio format scribe takes: what the page asks the browser for. */
+/** The one audio format scribe takes: what the page asks Chromium for. */
 export const SAMPLE_RATE = 16_000;
 const BYTES_PER_SAMPLE = 2;
 
@@ -29,14 +29,14 @@ const FRAME = SAMPLE_RATE / 10;
 /**
  * How loud the loudest 100 ms of audio must be to be speech, per track. Below
  * it, audio is not given to Whisper, because Whisper makes words up out of
- * silence. The tab carries the call as the browser plays it: about -44 dBFS
+ * silence. The tab track carries the call as the machine plays it: about -44 dBFS
  * is well under speech and well over a quiet line. The mic carries the room
  * as well — breath, keys, fans — under noise suppression and gain control
  * that lift speech well above it, so it is held to about -36 dBFS.
  */
 const SPEECH_RMS: Readonly<Record<Track, number>> = { mic: 500, tab: 200 };
 
-/** Which track a chunk is from: the mic (`Você`) or the shared tab (`Outros`). */
+/** Which track a chunk is from: the mic (`Você`) or the call's sound, `tab` (`Outros`). */
 export type Track = 'mic' | 'tab';
 
 /** One window, written and ready for Whisper. */

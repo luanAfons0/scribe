@@ -21,6 +21,10 @@ const PAGES = [
   { page: 'index.html', script: 'app.js' },
   { page: 'index.html', script: 'settings.js' },
   { page: 'index.html', script: 'downloads.js' },
+  { page: 'index.html', script: 'calendar.js' },
+  { page: 'index.html', script: 'events.js' },
+  { page: 'index.html', script: 'shortcut.js' },
+  { page: 'jot.html', script: 'jot.js' },
 ];
 
 /** Every `href` and `src` the page names, in the order it names them. */
@@ -236,4 +240,172 @@ test('app.js marks a sent Call in the list, and disables Send with no Worklog Pl
 
   assert.match(code, /found\.sentToWorklogAt !== null[\s\S]*?'Sent to Worklog'/);
   assert.match(code, /worklogPluginSet\(\)[\s\S]*?No Worklog Plugin is set[\s\S]*?disabled = true/);
+});
+
+test(
+  "the Settings view takes the calendar's secret address, and shows it masked once saved",
+  async () => {
+    const html = await readFile(join(WEB, 'index.html'), 'utf8');
+    const paths = pathsIn(html);
+
+    for (const id of [
+      'set-calendarUrl', 'calendar-empty', 'calendar-saved', 'calendarUrl-from',
+      'calendarUrl-ignored', 'calendar-read', 'calendar-problem',
+    ]) {
+      assert.ok(html.includes(`id="${id}"`), `index.html has no #${id}`);
+    }
+    for (const id of ['calendar-replace', 'calendar-remove']) {
+      // A button in the settings form submits it unless it says otherwise.
+      assert.match(html, new RegExp(`<button[^>]*type="button"[^>]*id="${id}"`));
+    }
+    assert.ok(paths.indexOf('calendar.js') < paths.indexOf('settings.js'), 'calendar.js loads late');
+  },
+);
+
+test('calendar.js never puts the address back on the Page', async () => {
+  const code = await readFile(join(WEB, 'calendar.js'), 'utf8');
+
+  // get_settings has no address to give; the field is emptied once it is sent.
+  assert.ok(!code.includes('calendarUrl.value'), 'calendar.js reads an address from the settings');
+  assert.match(code, /field\.value = '';/);
+  assert.match(code, /call\('update_settings', \{ calendarUrl: null \}\)/);
+  assert.match(code, /call\('list_events'\)/);
+});
+
+test('app.js says the Topics changed since sent, and offers Send again as the main act', async () => {
+  const code = await readFile(join(WEB, 'app.js'), 'utf8');
+  const css = await readFile(join(WEB, 'app.css'), 'utf8');
+
+  assert.match(
+    code,
+    /found\.topicsChangedSinceSent\)[\s\S]*?'The Topics changed since you sent them at '[\s\S]*?classList\.add\('changed'\)/,
+  );
+  assert.match(css, /\.worklog-state\.changed \{[^}]*color: var\(--cut\)/);
+});
+
+test('the Popup is jot.html, in the look of the Page, light and dark', async () => {
+  const html = await readFile(join(WEB, 'jot.html'), 'utf8');
+  const css = await readFile(join(WEB, 'app.css'), 'utf8');
+
+  assert.match(html, /<meta name="color-scheme" content="light dark">/);
+  const paths = pathsIn(html);
+  assert.ok(paths.includes('app.css'), 'jot.html does not share app.css');
+  assert.match(css, /@media \(prefers-color-scheme: dark\)/);
+});
+
+test('the Popup shows the Jottings of the Call that records, and keeps every change', async () => {
+  const html = await readFile(join(WEB, 'jot.html'), 'utf8');
+  const code = await readFile(join(WEB, 'jot.js'), 'utf8');
+
+  assert.match(html, /<textarea[^>]*id="jot-jottings"/);
+  // Without an id, get_call answers the Call that records, or null.
+  assert.match(code, /call\('get_call'\)/);
+  // The same box the Call's page keeps: every change is saved with save_jottings.
+  assert.ok(pathsIn(html).includes('jottings.js'), 'jot.html does not load jottings.js');
+  assert.match(code, /keepJottings\(/);
+});
+
+test('Stop in the Popup stops the Call with stop_call, and only from its click', async () => {
+  const html = await readFile(join(WEB, 'jot.html'), 'utf8');
+  const code = await readFile(join(WEB, 'jot.js'), 'utf8');
+
+  assert.match(html, /<button[^>]*id="jot-stop"[^>]*type="button"[^>]*>Stop<\/button>/);
+  assert.equal(code.split("call('stop_call'").length, 2, 'stop_call is called more than once');
+  assert.match(code, /stopButton\.addEventListener\('click'/);
+});
+
+test('with no Call recording, the Popup says so, with no button and no link', async () => {
+  const html = await readFile(join(WEB, 'jot.html'), 'utf8');
+
+  const empty = /<div class="pop-empty" id="jot-empty"[^>]*>([\s\S]*?)<\/div>/.exec(html);
+  assert.ok(empty, 'jot.html has no empty state');
+  assert.match(empty[1] ?? '', /No Call is recording/);
+  assert.match(empty[1] ?? '', /scribe’s page in the FirstMate window/);
+  // In the Popup, a link to the Host only hides it (FirstMate's popup.ts).
+  assert.ok(!/<(?:button|a)\b/.test(empty[1] ?? ''), 'the empty state offers a way out');
+});
+
+test('the Popup never records (ADR-0008)', async () => {
+  const html = await readFile(join(WEB, 'jot.html'), 'utf8');
+  const code = await readFile(join(WEB, 'jot.js'), 'utf8');
+
+  assert.ok(!pathsIn(html).includes('capture.js'), 'jot.html loads the capture');
+  assert.ok(!/getDisplayMedia|getUserMedia|startCapture|start_call/.test(code));
+});
+
+test("the Call's page reads the Jottings again when it gets focus", async () => {
+  const code = await readFile(join(WEB, 'app.js'), 'utf8');
+
+  assert.match(code, /window\.addEventListener\('focus', show\)/);
+});
+
+test('a reread never writes an old copy over a save that was on its way', async () => {
+  const code = await readFile(join(WEB, 'jottings.js'), 'utf8');
+  const app = await readFile(join(WEB, 'app.js'), 'utf8');
+
+  // A read asked for before a save ended may hold the text before it.
+  assert.match(code, /mark\(\)/);
+  assert.match(app, /const mark = jottings\.mark\(\);[\s\S]*?jottings\.show\(found\.id, found\.jottings, mark\)/);
+});
+
+test('a small tool call outlives the page, so a Popup that hides keeps its last save', async () => {
+  const code = await readFile(join(WEB, 'rpc.js'), 'utf8');
+
+  assert.match(code, /keepalive: /);
+});
+
+test('Settings shows the firstmate bind command line for the Popup, with a copy button', async () => {
+  const html = await readFile(join(WEB, 'index.html'), 'utf8');
+  const code = await readFile(join(WEB, 'shortcut.js'), 'utf8');
+
+  assert.match(html, /<code id="bind-command">firstmate bind Ctrl\+Shift\+J scribe jot\.html<\/code>/);
+  assert.match(html, /<button[^>]*id="copy-bind"[^>]*type="button"/);
+  assert.match(code, /navigator\.clipboard\.writeText/);
+});
+
+test('the Calls list shows the Event that starts within five minutes as a banner', async () => {
+  const html = await readFile(join(WEB, 'index.html'), 'utf8');
+  const code = await readFile(join(WEB, 'events.js'), 'utf8');
+  const app = await readFile(join(WEB, 'app.js'), 'utf8');
+
+  // A Notice opens #upcoming, so the banner carries that id.
+  const banner = /<div class="event" id="upcoming"[^>]*>([\s\S]*?)<\/div>\s*<p class="next-event"/.exec(html);
+  assert.ok(banner, 'index.html has no banner with the id a Notice opens');
+  assert.match(banner[1] ?? '', /<a id="upcoming-meet"[^>]*target="_blank"[^>]*>Open the Meet<\/a>/);
+  assert.match(banner[1] ?? '', /<button class="act go" id="upcoming-start" type="button">Start a Call<\/button>/);
+  assert.ok(html.indexOf('id="upcoming"') < html.indexOf('id="start"'), 'the banner is under the list');
+  assert.match(code, /call\('list_events'\)/);
+  assert.match(code, /const SOON_MS = 5 \* 60_000;/);
+  assert.match(code, /Date\.parse\(event\.end\) > now/);
+  assert.match(code, /scrollIntoView/);
+  assert.match(app, /byId\('upcoming-start'\)\.addEventListener\('click', start\)/);
+});
+
+test('further away, the Calls list says the next Event in one line', async () => {
+  const html = await readFile(join(WEB, 'index.html'), 'utf8');
+  const code = await readFile(join(WEB, 'events.js'), 'utf8');
+
+  assert.match(html, /<p class="next-event" id="next-event" hidden>/);
+  assert.match(code, /'Next Event: '/);
+  assert.match(code, /', on Google Meet\.'/);
+});
+
+test('the banner is the accent blue, light and dark, and never red', async () => {
+  const css = await readFile(join(WEB, 'app.css'), 'utf8');
+
+  assert.equal(css.match(/--accent-soft: /g)?.length, 2, 'the soft accent is not set for both');
+  const rule = /\.event \{[^}]*\}/.exec(css)?.[0] ?? '';
+  assert.match(rule, /border: 1px solid var\(--accent\)/);
+  assert.match(rule, /background: var\(--accent-soft\)/);
+  assert.ok(!/--live/.test(rule), 'the banner uses the red of recording');
+});
+
+test('a Call named after its Event says so on its meta line, with Event in the accent', async () => {
+  const code = await readFile(join(WEB, 'app.js'), 'utf8');
+  const css = await readFile(join(WEB, 'app.css'), 'utf8');
+
+  assert.match(code, /found\.event !== null && found\.title === found\.event\.name/);
+  assert.match(code, /className = 'from-event';\s*event\.textContent = 'Event';/);
+  assert.match(code, /callMeta\.append\(' · Title from the ', event\)/);
+  assert.match(css, /\.from-event \{[^}]*color: var\(--accent\)/);
 });

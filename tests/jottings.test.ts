@@ -1,6 +1,6 @@
 /**
  * Jottings are what you type during a Call. Each change is kept on the Plugin
- * Server at once, so a tab that closes loses nothing.
+ * Server at once, so a page that closes loses nothing.
  */
 import { strict as assert } from 'node:assert';
 import test from 'node:test';
@@ -55,7 +55,7 @@ test('Jottings can change after the Call ended', async (t) => {
   assert.equal((await getCall(plugin, id)).jottings, 'written after');
 });
 
-test('Stop from another tab ends the Call this tab records, and this tab is told', async (t) => {
+test('Stop from another page ends the Call this page records, and this page is told', async (t) => {
   const plugin = await startedAndShaken(t);
   const id = await startCall(plugin);
 

@@ -1,7 +1,7 @@
-/* The scribe Plugin Page: the list of Calls, one Call, and the Call this tab
+/* The scribe Plugin Page: the list of Calls, one Call, and the Call this page
    records. Everything it shows, it asks the Plugin Server for; the one thing
    it keeps is the capture of the Call it records, which lives only in this
-   tab (ADR-0001). The address says what is shown: # for the list, #call/7
+   page, in the FirstMate window (ADR-0008). The address says what is shown: # for the list, #call/7
    for one Call, #settings for the Settings view, so a reload shows the same
    thing. */
 'use strict';
@@ -54,7 +54,10 @@ const wholeTranscript = new Set();
 /** How often the page asks again while something is still changing. */
 const POLL_MS = 2000;
 
-/** The Call this tab records, while it records one. */
+/** How often the list asks again while an Event is coming, so its banner shows in time. */
+const EVENT_POLL_MS = 15_000;
+
+/** The Call this page records, while it records one. */
 let capture = null;
 
 /** The Jottings box, which follows the Call shown. */
@@ -99,6 +102,7 @@ function shownId() {
   return found ? Number(found[1]) : null;
 }
 
+/** The list of Calls, and the Event that starts next. Answers whether an Event is coming. */
 async function showList() {
   const listed = await call('list_calls');
   callList.replaceChildren(
@@ -134,20 +138,30 @@ async function showList() {
   setupNote.hidden = problem === null;
   setupText.textContent = problem || '';
   if (problem !== null) startButton.disabled = true;
+  return drawUpcoming();
 }
 
 /** One Call, drawn whole. Answers whether it is still changing. */
 async function showCall(id) {
+  const mark = jottings.mark();
   const found = (await call('get_call', { id: id })).call;
   callTitle.textContent = nameOf(found);
   callMeta.textContent =
     when(found.startedAt) + ' · ' + lengthOf(found) + ' · ' + STATE_WORDS[found.state];
+  // A title the Event gave is said to be the Event's, until the operator
+  // gives one of their own.
+  if (found.event !== null && found.title === found.event.name) {
+    const event = document.createElement('span');
+    event.className = 'from-event';
+    event.textContent = 'Event';
+    callMeta.append(' · Title from the ', event);
+  }
   callView.dataset.state = found.state;
   stopButton.hidden = found.state !== 'recording';
   deleteButton.hidden = found.state === 'recording';
   callView.dataset.title = found.title || '';
   cutNote.hidden = found.state !== 'cut';
-  jottings.show(found.id, found.jottings);
+  jottings.show(found.id, found.jottings, mark);
 
   const whole = wholeTranscript.has(found.id) || found.transcript.length <= LAST_LINES;
   const hidden = whole ? 0 : found.transcript.length - LAST_LINES;
@@ -227,7 +241,7 @@ async function showTopics(found) {
   topicsPart.hidden = found.topics === null || found.state === 'recording';
   if (topicsPart.hidden) return;
   topicsText.textContent = found.topics;
-  worklogState.classList.remove('fault');
+  worklogState.classList.remove('fault', 'changed');
   sendButton.disabled = false;
   sendButton.classList.add('go');
   sendButton.textContent = found.sentToWorklogAt === null ? 'Send to Worklog' : 'Send again';
@@ -246,6 +260,11 @@ async function showTopics(found) {
   } else if (found.entryError !== null) {
     worklogState.textContent = found.entryError;
     worklogState.classList.add('fault');
+  } else if (found.topicsChangedSinceSent) {
+    // Worklog holds the Topics as they were: Send again stays the main act.
+    worklogState.textContent =
+      'The Topics changed since you sent them at ' + when(found.sentToWorklogAt) + '.';
+    worklogState.classList.add('changed');
   } else if (found.sentToWorklogAt !== null) {
     worklogState.textContent =
       'Sent to Worklog ' + when(found.sentToWorklogAt) + ', as one Done Entry.';
@@ -284,7 +303,7 @@ async function showLive() {
   if (running !== null) {
     liveText.textContent =
       'Recording ' + nameOf(running) + ' · ' + lengthOf(running) +
-      (capture !== null && capture.id === running.id ? '' : ' (in another tab)');
+      (capture !== null && capture.id === running.id ? '' : ' (on another page)');
     live.dataset.id = String(running.id);
   }
   return running;
@@ -306,19 +325,21 @@ async function show() {
   try {
     const running = await showLive();
     let changing = false;
+    let eventComing = false;
     if (settings) {
       // The Settings view is drawn once when it opens, so a poll never
       // writes over a field being typed in.
       if (!settingsShown) await showSettings();
       settingsShown = true;
     } else if (id === null) {
-      await showList();
+      eventComing = await showList();
       changing = running !== null;
     } else {
       changing = await showCall(id);
     }
     say(null);
     if (changing || running !== null) timer = setTimeout(show, POLL_MS);
+    else if (eventComing) timer = setTimeout(show, EVENT_POLL_MS);
   } catch (fault) {
     say(fault);
     timer = setTimeout(show, POLL_MS * 2);
@@ -338,13 +359,13 @@ async function start() {
     });
     location.hash = '#call/' + capture.id;
   } catch (fault) {
-    // Closing the picker is a choice, not a fault.
+    // Refusing the capture is a choice, not a fault.
     if (fault.name !== 'NotAllowedError') say(fault);
   }
   show();
 }
 
-/** Stop the Call that records: through this tab's capture, when it has it. */
+/** Stop the Call that records: through this page's capture, when it has it. */
 async function stop(id) {
   try {
     if (capture !== null && capture.id === id) await capture.stop();
@@ -428,9 +449,12 @@ moreLines.addEventListener('click', () => {
 });
 
 startButton.addEventListener('click', start);
+byId('upcoming-start').addEventListener('click', start);
 makeButton.addEventListener('click', makeMinutes);
 sendButton.addEventListener('click', sendToWorklog);
 stopButton.addEventListener('click', () => stop(shownId()));
 liveStop.addEventListener('click', () => stop(Number(live.dataset.id)));
 window.addEventListener('hashchange', show);
+// The Popup may have changed the Jottings while this page had no focus.
+window.addEventListener('focus', show);
 show();

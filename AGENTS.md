@@ -1,6 +1,6 @@
 # scribe
 
-scribe is a FirstMate Plugin. It records a Call that runs in a browser tab,
+scribe is a FirstMate Plugin. It records a Call from the FirstMate window,
 turns its audio into a Transcript with whisper.cpp, and makes the Minutes from
 the Jottings and the Transcript with a command the operator chooses. It is a
 Plugin Server with one SQLite file behind it, and a Plugin Page.
@@ -93,6 +93,16 @@ src/           the Plugin Server. Every file is one job.
   worklog-entry.ts the Call's Entry in Worklog, sent only by send_to_worklog,
                when the operator presses Send to Worklog: its title, its
                Topics, and why it was not sent, when it was not.
+  ical.ts      the iCal text, read by scribe's own reader: unfolded lines,
+               properties, and times through Intl (ADR-0006).
+  events.ts    which entries of the feed are Events, and when each happens:
+               moved, cancelled and removed times of a series included.
+  recurrence.ts an RRULE as Google writes it, expanded in wall time; a rule
+               it cannot read gives no Event (ADR-0006).
+  calendar.ts  the calendar's secret address, read now and every few
+               minutes; the Events, held in memory; the last read's result.
+  notices.ts   a Notice through the Host a minute before each Event, once,
+               one every 5 s (FirstMate ADR-0014).
   bus.ts       the Tool Bus, from this end of the pipe: ask the Host to call
                another Plugin's tool, and read its answer by id.
   tools.ts     the tools this Plugin ships, for the Page.
@@ -101,13 +111,23 @@ web/           the Plugin Page, as the Host serves it.
   index.html   the Plugin Page, drawn by app.js.
   rpc.js       call(): one tool call over POST rpc.
   app.js       the list of Calls, one Call, and Start and Stop.
-  settings.js  the Settings view: the four settings, who decides each, and
+  settings.js  the Settings view: the settings, who decides each, and
                what is missing.
+  calendar.js  the calendar's secret address in Settings: masked once saved,
+               and what its last read gave.
+  events.js    the Calls list's Event: a banner from five minutes before it
+               until it ends, or the next one in one line.
   downloads.js the offers to fetch whisper.cpp and a model, and how far each
                download got.
-  jottings.js  keepJottings(): the box that keeps every change at once.
+  jottings.js  keepJottings(): the box that keeps every change at once, and
+               takes the text the Popup saved.
+  jot.html     the Popup a Shortcut opens: the Jottings of the Call that
+               records, and Stop. It never records (ADR-0008).
+  jot.js       draws jot.html. jot.css is its look, on top of app.css.
+  shortcut.js  the Settings view's firstmate bind command line, and Copy.
   markdown.js  the small Markdown renderer for the Minutes, as Worklog's.
-  capture.js   startCapture(): the tab and the mic, sent in chunks (ADR-0001).
+  capture.js   startCapture(): the capture's sound and the mic, sent in chunks
+               (ADR-0008).
   pcm-tap.js   the AudioWorklet that cuts a track into 16-bit PCM chunks.
   app.css      the one stylesheet.
 tests/         one file per behaviour, plus helpers/ and fixtures/.
@@ -161,7 +181,7 @@ not the project's. Git ignores all four.
 - The suite runs on Linux and on Windows. A test that only makes sense on one
   skips on the other and says why, as `wrapper.test.ts` does.
 - **The Page as bytes**: `tests/page.test.ts` reads `web/` off disk, because
-  no test drives a browser. Recording needs a human click in Chrome's picker,
+  no test drives a browser. Recording needs a human click in the App's dialog,
   so it is checked by hand.
 - A test name is a sentence about behaviour:
   `'with no whisper.cpp set, recording is refused with a sentence that names the setting'`.
@@ -204,7 +224,8 @@ not the project's. Git ignores all four.
   Worklog gets a Call's title, its times and its Topics, and nothing else,
   and only on Send to Worklog.
 - Edit a Transcript. It is the record of the Call.
-- Record in the FirstMate window or the Popup (ADR-0001).
+- Record anywhere but scribe's Plugin Page in the FirstMate window. The Popup
+  never records (ADR-0008).
 - Tell the other people on the call anything, or join or post to a call.
 - Load anything from a CDN, or name an absolute path in the Page.
 - Print or commit a real `scribe.db`, FirstMate's token or `runtime.json`.
