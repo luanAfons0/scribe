@@ -415,6 +415,7 @@ h3.section-label { margin-top: 24px; }
 }
 
 .worklog-state { margin: 0; font-size: 13px; color: var(--muted); }
+.worklog-state.changed { color: var(--cut); font-weight: 600; }
 .worklog-state.fault { color: var(--live); }
 .worklog-state a { color: var(--accent); font-weight: 600; }
 

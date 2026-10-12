@@ -227,7 +227,7 @@ async function showTopics(found) {
   topicsPart.hidden = found.topics === null || found.state === 'recording';
   if (topicsPart.hidden) return;
   topicsText.textContent = found.topics;
-  worklogState.classList.remove('fault');
+  worklogState.classList.remove('fault', 'changed');
   sendButton.disabled = false;
   sendButton.classList.add('go');
   sendButton.textContent = found.sentToWorklogAt === null ? 'Send to Worklog' : 'Send again';
@@ -246,6 +246,11 @@ async function showTopics(found) {
   } else if (found.entryError !== null) {
     worklogState.textContent = found.entryError;
     worklogState.classList.add('fault');
+  } else if (found.topicsChangedSinceSent) {
+    // Worklog holds the Topics as they were: Send again stays the main act.
+    worklogState.textContent =
+      'The Topics changed since you sent them at ' + when(found.sentToWorklogAt) + '.';
+    worklogState.classList.add('changed');
   } else if (found.sentToWorklogAt !== null) {
     worklogState.textContent =
       'Sent to Worklog ' + when(found.sentToWorklogAt) + ', as one Done Entry.';

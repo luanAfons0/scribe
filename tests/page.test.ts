@@ -237,3 +237,14 @@ test('app.js marks a sent Call in the list, and disables Send with no Worklog Pl
   assert.match(code, /found\.sentToWorklogAt !== null[\s\S]*?'Sent to Worklog'/);
   assert.match(code, /worklogPluginSet\(\)[\s\S]*?No Worklog Plugin is set[\s\S]*?disabled = true/);
 });
+
+test('app.js says the Topics changed since sent, and offers Send again as the main act', async () => {
+  const code = await readFile(join(WEB, 'app.js'), 'utf8');
+  const css = await readFile(join(WEB, 'app.css'), 'utf8');
+
+  assert.match(
+    code,
+    /found\.topicsChangedSinceSent\)[\s\S]*?'The Topics changed since you sent them at '[\s\S]*?classList\.add\('changed'\)/,
+  );
+  assert.match(css, /\.worklog-state\.changed \{[^}]*color: var\(--cut\)/);
+});

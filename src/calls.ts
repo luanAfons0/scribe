@@ -58,6 +58,11 @@ export type CallView = CallSummary & {
   readonly entryError: string | null;
   /** Whether the Topics are on their way to Worklog now. */
   readonly sendingToWorklog: boolean;
+  /**
+   * Whether the Minutes wrote other Topics after the last good send, so
+   * Worklog holds an old version of them.
+   */
+  readonly topicsChangedSinceSent: boolean;
 };
 
 type CallRow = {
@@ -74,6 +79,7 @@ type CallRow = {
   readonly entry_id: number | null;
   readonly entry_error: string | null;
   readonly entry_sent_at: string | null;
+  readonly topics_written_at: string | null;
 };
 
 const SPEAKERS: Readonly<Record<Track, Speaker>> = { mic: 'Você', tab: 'Outros' };
@@ -150,6 +156,7 @@ export function viewOf(
     entryId: row.entry_id,
     entryError: row.entry_error,
     sendingToWorklog,
+    topicsChangedSinceSent: changedSinceSent(row),
   };
 }
 
@@ -167,15 +174,18 @@ export function setMinutesState(
 
 /**
  * Keep the Minutes a command made, with its Topics, and its title unless the
- * operator gave the Call one of their own.
+ * operator gave the Call one of their own. The time the Topics were written
+ * moves only when they are not the ones there were, so Minutes made again
+ * with the same Topics do not count as a change since they were sent.
  */
 export function keepMinutes(store: Store, id: number, made: Made): void {
   store
     .prepare(
       "UPDATE calls SET minutes = ?, topics = ?, minutes_state = 'made', minutes_error = NULL, " +
+        'topics_written_at = CASE WHEN topics IS ? THEN topics_written_at ELSE ? END, ' +
         'title = CASE WHEN title_given = 1 OR ? IS NULL THEN title ELSE ? END WHERE id = ?',
     )
-    .run(made.minutes, made.topics, made.title, made.title, id);
+    .run(made.minutes, made.topics, made.topics, now(), made.title, made.title, id);
 }
 
 /**
@@ -284,6 +294,17 @@ export function checkJottings(given: unknown): string {
     throw badInput(`save_jottings takes at most ${MOST_JOTTINGS} characters of Jottings.`);
   }
   return given;
+}
+
+/**
+ * Whether the Topics were written after they last went to Worklog. A send
+ * keeps the Topics it was started with, and the Minutes cannot be made while
+ * a send runs, so no Topics are written between the start of a send and the
+ * time it keeps.
+ */
+function changedSinceSent(row: CallRow): boolean {
+  if (row.entry_sent_at === null || row.topics_written_at === null) return false;
+  return row.topics_written_at > row.entry_sent_at;
 }
 
 /** One Call's row, or a sentence that says there is no such Call. */

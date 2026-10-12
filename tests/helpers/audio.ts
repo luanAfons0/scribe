@@ -78,6 +78,7 @@ export type Call = {
   readonly entryId: number | null;
   readonly entryError: string | null;
   readonly sendingToWorklog: boolean;
+  readonly topicsChangedSinceSent: boolean;
 };
 
 /** One Call, by id. */

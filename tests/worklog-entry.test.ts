@@ -6,9 +6,12 @@
  * all.
  */
 import { strict as assert } from 'node:assert';
-import test from 'node:test';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import test, { type TestContext } from 'node:test';
 import { getCall, pcm, send, startCall, until, type Call } from './helpers/audio.ts';
 import {
+  makeDirectory,
   minutesCommand,
   startedAndShaken,
   structureOf,
@@ -339,4 +342,120 @@ test('a send that works clears the sentence an earlier one left', async (t) => {
   assert.equal(second.params['name'], 'create_entry');
   assert.equal(call.entryId, 4);
   assert.equal(call.entryError, null);
+});
+
+/** The Topics the fixture Minutes command writes, until a test changes them. */
+const FIRST_TOPICS = '- Prazo da entrega';
+
+/**
+ * A Plugin Server whose Minutes command writes the Topics a file holds, and
+ * a way to change them before the Minutes are made again.
+ */
+async function withTopicsFile(
+  t: TestContext,
+): Promise<{ plugin: Started; write(topics: string): Promise<void> }> {
+  const directory = await makeDirectory(t);
+  const file = join(directory, 'topics.txt');
+  await writeFile(file, FIRST_TOPICS);
+  const plugin = await startedAndShaken(t, {
+    directory,
+    env: { ...SETTINGS, SCRIBE_TEST_TOPICS_FILE: file },
+  });
+  return { plugin, write: (topics) => writeFile(file, topics) };
+}
+
+/** Make a Call's Minutes again, as the Page does, and wait until they are made. */
+async function remade(plugin: Started, id: number): Promise<Call> {
+  const answer = await plugin.call('make_minutes', { id });
+  assert.equal(answer.error, undefined, answer.error?.message);
+  return until(plugin, id, (seen) => seen.minutesState === 'made');
+}
+
+test('Minutes made again with new Topics send nothing, and say the Topics changed since sent', async (t) => {
+  const { plugin, write } = await withTopicsFile(t);
+  const id = await sentCall(plugin);
+  const before = await getCall(plugin, id);
+
+  await write('- Prazo da entrega\n- Novo prazo: segunda');
+  const call = await remade(plugin, id);
+  await settle();
+
+  assert.equal(before.topicsChangedSinceSent, false);
+  assert.equal(call.topics, '- Prazo da entrega\n- Novo prazo: segunda');
+  assert.equal(call.topicsChangedSinceSent, true);
+  assert.equal(call.sentToWorklogAt, before.sentToWorklogAt);
+  assert.equal(plugin.questions().length, 1, 'making the Minutes again sent the Topics');
+});
+
+test('Minutes made again with the same Topics do not count as changed', async (t) => {
+  const { plugin } = await withTopicsFile(t);
+  const id = await sentCall(plugin);
+
+  const call = await remade(plugin, id);
+
+  assert.equal(call.topics, FIRST_TOPICS);
+  assert.equal(call.topicsChangedSinceSent, false);
+});
+
+test('Topics that never went to Worklog do not count as changed, however often they change', async (t) => {
+  const { plugin, write } = await withTopicsFile(t);
+  const id = await madeCall(plugin);
+
+  await write('- Outro prazo');
+  const call = await remade(plugin, id);
+
+  assert.equal(call.topics, '- Outro prazo');
+  assert.equal(call.topicsChangedSinceSent, false);
+});
+
+test('Send again after the Topics changed changes the same Entry, and clears the change', async (t) => {
+  const { plugin, write } = await withTopicsFile(t);
+  const id = await sentCall(plugin);
+  await write('- Novo prazo: segunda');
+  const changed = await remade(plugin, id);
+
+  await sendToWorklog(plugin, id);
+  const question = await plugin.nextQuestion();
+  plugin.answerAsHost(question.id, entry(7));
+  const call = await until(plugin, id, (seen) => seen.sentToWorklogAt !== changed.sentToWorklogAt);
+
+  assert.equal(changed.topicsChangedSinceSent, true);
+  assert.equal(question.params['name'], 'update_entry');
+  const sent = question.params['arguments'] as Record<string, unknown>;
+  assert.equal(sent['id'], 7);
+  assert.equal(sent['body'], '- Novo prazo: segunda');
+  assert.equal(call.entryId, 7);
+  assert.equal(call.topicsChangedSinceSent, false);
+});
+
+test('a Send again that fails keeps the Topics changed since sent', async (t) => {
+  const { plugin, write } = await withTopicsFile(t);
+  const id = await sentCall(plugin);
+  await write('- Novo prazo: segunda');
+  await remade(plugin, id);
+
+  await sendToWorklog(plugin, id);
+  const question = await plugin.nextQuestion();
+  plugin.answerAsHost(question.id, { error: { code: -32603, message: 'database is locked' } });
+  const call = await until(plugin, id, (seen) => seen.entryError !== null);
+
+  assert.equal(call.topicsChangedSinceSent, true);
+});
+
+test('when the changed Topics find their Entry gone, a new Entry keeps its id and clears the change', async (t) => {
+  const { plugin, write } = await withTopicsFile(t);
+  const id = await sentCall(plugin);
+  await write('- Novo prazo: segunda');
+  await remade(plugin, id);
+
+  await sendToWorklog(plugin, id);
+  const update = await plugin.nextQuestion();
+  plugin.answerAsHost(update.id, { error: { code: -32602, message: 'No Entry has the id 7.' } });
+  const create = await plugin.nextQuestion();
+  plugin.answerAsHost(create.id, entry(12));
+  const call = await until(plugin, id, (seen) => seen.entryId === 12);
+
+  assert.equal(create.params['name'], 'create_entry');
+  assert.equal((create.params['arguments'] as Record<string, unknown>)['body'], '- Novo prazo: segunda');
+  assert.equal(call.topicsChangedSinceSent, false);
 });
