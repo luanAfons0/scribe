@@ -23,6 +23,7 @@ const callTitle = byId('call-title');
 const callMeta = byId('call-meta');
 const stopButton = byId('stop');
 const cutNote = byId('cut-note');
+const shortcutHint = byId('shortcut-hint');
 const jottingsBox = byId('call-jottings');
 const makeButton = byId('make-minutes');
 const minutesState = byId('minutes-state');
@@ -69,18 +70,25 @@ function say(fault) {
   banner.textContent = fault === null ? '' : fault.message || String(fault);
 }
 
-/** A moment as this person reads it: their own date and time. */
-function when(iso) {
-  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+/** Whether a Call records now. */
+function isRecording(found) {
+  return found.state === 'recording';
 }
 
-/** A length of time as a clock reads it: 4:05, or 1:02:07. */
-function clock(ms) {
-  const seconds = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor(seconds / 60) % 60;
-  const s = String(seconds % 60).padStart(2, '0');
-  return h > 0 ? h + ':' + String(m).padStart(2, '0') + ':' + s : m + ':' + s;
+/**
+ * When the Topics went to Worklog, as the Worklog line says it: "today at
+ * 14:55", or "on 9 Oct at 14:55" on another day.
+ */
+function sentWhen(iso) {
+  const date = new Date(iso);
+  const time = date.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  });
+  if (date.toDateString() === new Date().toDateString()) return 'today at ' + time;
+  const day = date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  return 'on ' + day + ' at ' + time;
 }
 
 /** How long a Call has run, or ran. */
@@ -157,11 +165,12 @@ async function showCall(id) {
     callMeta.append(' · Title from the ', event);
   }
   callView.dataset.state = found.state;
-  stopButton.hidden = found.state !== 'recording';
-  deleteButton.hidden = found.state === 'recording';
+  stopButton.hidden = !isRecording(found);
+  deleteButton.hidden = isRecording(found);
   callView.dataset.title = found.title || '';
   cutNote.hidden = found.state !== 'cut';
   jottings.show(found.id, found.jottings, mark);
+  shortcutHint.hidden = !isRecording(found);
 
   const whole = wholeTranscript.has(found.id) || found.transcript.length <= LAST_LINES;
   const hidden = whole ? 0 : found.transcript.length - LAST_LINES;
@@ -190,7 +199,7 @@ async function showCall(id) {
   showMinutes(found);
   await showTopics(found);
   return (
-    found.state === 'recording' ||
+    isRecording(found) ||
     found.transcribing ||
     found.minutesState === 'making' ||
     found.sendingToWorklog
@@ -204,7 +213,7 @@ const MINUTES_WORDS = {
 };
 
 function showMinutes(found) {
-  const over = found.state !== 'recording';
+  const over = !isRecording(found);
   minutesView.hidden = found.minutes === null;
   if (found.minutes !== null && minutesView.dataset.source !== found.minutes) {
     minutesView.innerHTML = renderMarkdown(found.minutes);
@@ -213,7 +222,7 @@ function showMinutes(found) {
   const state =
     found.minutesState === 'failed'
       ? 'The Minutes could not be made: ' + found.minutesError
-      : found.state === 'recording'
+      : isRecording(found)
         ? 'The Minutes are made when the Call stops.'
         : found.transcribing && found.minutesState === 'none'
           ? 'The Minutes are made once Whisper has read all the audio.'
@@ -238,13 +247,15 @@ const NOT_SENT = 'Not sent. Only the title, the times and these Topics go to Wor
  * pressed.
  */
 async function showTopics(found) {
-  topicsPart.hidden = found.topics === null || found.state === 'recording';
+  topicsPart.hidden = found.topics === null || isRecording(found);
   if (topicsPart.hidden) return;
   topicsText.textContent = found.topics;
   worklogState.classList.remove('fault', 'changed');
   sendButton.disabled = false;
   sendButton.classList.add('go');
-  sendButton.textContent = found.sentToWorklogAt === null ? 'Send to Worklog' : 'Send again';
+  // A send that failed, even the first, is pressed again as Send again.
+  const sentOrTried = found.sentToWorklogAt !== null || found.entryError !== null;
+  sendButton.textContent = sentOrTried ? 'Send again' : 'Send to Worklog';
 
   if (found.sendingToWorklog) {
     worklogState.textContent = 'Sending the Topics to Worklog…';
@@ -262,12 +273,12 @@ async function showTopics(found) {
     worklogState.classList.add('fault');
   } else if (found.topicsChangedSinceSent) {
     // Worklog holds the Topics as they were: Send again stays the main act.
-    worklogState.textContent =
-      'The Topics changed since you sent them at ' + when(found.sentToWorklogAt) + '.';
+    const at = sentWhen(found.sentToWorklogAt).replace(/^today /, '');
+    worklogState.textContent = 'The Topics changed since you sent them ' + at + '.';
     worklogState.classList.add('changed');
   } else if (found.sentToWorklogAt !== null) {
     worklogState.textContent =
-      'Sent to Worklog ' + when(found.sentToWorklogAt) + ', as one Done Entry.';
+      'Sent to Worklog ' + sentWhen(found.sentToWorklogAt) + ', as one Done Entry.';
     sendButton.classList.remove('go');
   } else {
     worklogState.textContent = NOT_SENT;

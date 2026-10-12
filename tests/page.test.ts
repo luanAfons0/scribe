@@ -19,12 +19,14 @@ const WEB = join(REPOSITORY, 'web');
 /** Every page in web/, and the scripts of its own that reach for its elements. */
 const PAGES = [
   { page: 'index.html', script: 'app.js' },
+  { page: 'index.html', script: 'time.js' },
   { page: 'index.html', script: 'settings.js' },
   { page: 'index.html', script: 'downloads.js' },
   { page: 'index.html', script: 'calendar.js' },
   { page: 'index.html', script: 'events.js' },
   { page: 'index.html', script: 'shortcut.js' },
   { page: 'jot.html', script: 'jot.js' },
+  { page: 'jot.html', script: 'time.js' },
 ];
 
 /** Every `href` and `src` the page names, in the order it names them. */
@@ -190,7 +192,7 @@ test('downloads.js fetches through the fetch tools, and only from a click', asyn
 });
 
 test(
-  'the Settings view offers to fetch Speakers, with its progress, its result, and its problem',
+  'the Settings view offers to fetch the diarizer, with its progress, its result, and its problem',
   async () => {
     const html = await readFile(join(WEB, 'index.html'), 'utf8');
 
@@ -201,17 +203,22 @@ test(
     ]) {
       assert.ok(html.includes(`id="${id}"`), `index.html has no #${id}`);
     }
-    assert.match(html, /<button[^>]*id="fetch-diarizer"[^>]*type="button"[^>]*>Fetch Speakers</);
+    // A Speaker is a Transcript line's label, not a program: the button names the program.
+    assert.match(
+      html,
+      /<button[^>]*id="fetch-diarizer"[^>]*type="button"[^>]*>Fetch the diarizer</,
+    );
+    assert.ok(!/Fetch Speakers/.test(html), 'index.html still offers to fetch Speakers');
     assert.match(html, /Tells the people in the call’s sound apart after each Call stops\./);
   },
 );
 
-test('downloads.js offers Speakers only while the diarizer is not set or has a problem', async () => {
+test('downloads.js offers the diarizer only while it is not set or has a problem', async () => {
   const code = await readFile(join(WEB, 'downloads.js'), 'utf8');
 
   assert.match(code, /diarizerSetting = settings\.diarizer/);
   assert.match(code, /setting\.value !== null && setting\.problem === null/);
-  assert.match(code, /New Calls get Speakers\./);
+  assert.match(code, /scribe does not run it yet: Calls get no Speakers until it does\./);
 });
 
 test('downloads.js offers whisper.cpp only while it is not set or has a problem', async () => {
@@ -262,12 +269,18 @@ test('app.js sends to Worklog only from a click of Send to Worklog', async () =>
   assert.ok(code.includes("byId('send-worklog')"), 'app.js does not reach for the button');
 });
 
-test('app.js marks a sent Call in the list, and disables Send with no Worklog Plugin set', async () => {
-  const code = await readFile(join(WEB, 'app.js'), 'utf8');
+test(
+  'app.js marks a sent Call in the list, and disables Send with no Worklog Plugin set',
+  async () => {
+    const code = await readFile(join(WEB, 'app.js'), 'utf8');
 
-  assert.match(code, /found\.sentToWorklogAt !== null[\s\S]*?'Sent to Worklog'/);
-  assert.match(code, /worklogPluginSet\(\)[\s\S]*?No Worklog Plugin is set[\s\S]*?disabled = true/);
-});
+    assert.match(code, /found\.sentToWorklogAt !== null[\s\S]*?'Sent to Worklog'/);
+    assert.match(
+      code,
+      /worklogPluginSet\(\)[\s\S]*?No Worklog Plugin is set[\s\S]*?disabled = true/,
+    );
+  },
+);
 
 test(
   "the Settings view takes the calendar's secret address, and shows it masked once saved",
@@ -285,7 +298,8 @@ test(
       // A button in the settings form submits it unless it says otherwise.
       assert.match(html, new RegExp(`<button[^>]*type="button"[^>]*id="${id}"`));
     }
-    assert.ok(paths.indexOf('calendar.js') < paths.indexOf('settings.js'), 'calendar.js loads late');
+    const late = paths.indexOf('calendar.js') > paths.indexOf('settings.js');
+    assert.ok(!late, 'calendar.js loads late');
   },
 );
 
@@ -299,15 +313,45 @@ test('calendar.js never puts the address back on the Page', async () => {
   assert.match(code, /call\('list_events'\)/);
 });
 
-test('app.js says the Topics changed since sent, and offers Send again as the main act', async () => {
+test(
+  'app.js says the Topics changed since sent, and offers Send again as the main act',
+  async () => {
+    const code = await readFile(join(WEB, 'app.js'), 'utf8');
+    const css = await readFile(join(WEB, 'app.css'), 'utf8');
+
+    assert.match(
+      code,
+      new RegExp(
+        "found\\.topicsChangedSinceSent\\)[\\s\\S]*?'The Topics changed since you sent them '" +
+          "[\\s\\S]*?classList\\.add\\('changed'\\)",
+      ),
+    );
+    assert.match(css, /\.worklog-state\.changed \{[^}]*color: var\(--cut\)/);
+  },
+);
+
+test('app.js says when the Topics went to Worklog as the approved design does', async () => {
   const code = await readFile(join(WEB, 'app.js'), 'utf8');
-  const css = await readFile(join(WEB, 'app.css'), 'utf8');
+
+  // "Sent to Worklog today at 14:55", and "on 9 Oct at 14:55" on another day.
+  assert.match(code, /return 'today at ' \+ time;/);
+  assert.match(code, /return 'on ' \+ day \+ ' at ' \+ time;/);
+  assert.match(code, /'Sent to Worklog ' \+ sentWhen\(found\.sentToWorklogAt\)/);
+  // The changed sentence says "at 14:55" today, as the approved design does.
+  assert.match(code, /sentWhen\(found\.sentToWorklogAt\)\.replace\(\/\^today \/, ''\)/);
+  assert.ok(!/when\(found\.sentToWorklogAt\)/.test(code), 'a send is said with the full date');
+});
+
+test('after a send that failed, even the first, the button says Send again', async () => {
+  const code = await readFile(join(WEB, 'app.js'), 'utf8');
 
   assert.match(
     code,
-    /found\.topicsChangedSinceSent\)[\s\S]*?'The Topics changed since you sent them at '[\s\S]*?classList\.add\('changed'\)/,
+    new RegExp(
+      'found\\.sentToWorklogAt !== null \\|\\| found\\.entryError !== null;\\s*' +
+        "sendButton\\.textContent = sentOrTried \\? 'Send again' : 'Send to Worklog';",
+    ),
   );
-  assert.match(css, /\.worklog-state\.changed \{[^}]*color: var\(--cut\)/);
 });
 
 test('the Popup is jot.html, in the look of the Page, light and dark', async () => {
@@ -372,7 +416,10 @@ test('a reread never writes an old copy over a save that was on its way', async 
 
   // A read asked for before a save ended may hold the text before it.
   assert.match(code, /mark\(\)/);
-  assert.match(app, /const mark = jottings\.mark\(\);[\s\S]*?jottings\.show\(found\.id, found\.jottings, mark\)/);
+  assert.match(
+    app,
+    /const mark = jottings\.mark\(\);[\s\S]*?jottings\.show\(found\.id, found\.jottings, mark\)/,
+  );
 });
 
 test('a small tool call outlives the page, so a Popup that hides keeps its last save', async () => {
@@ -381,14 +428,20 @@ test('a small tool call outlives the page, so a Popup that hides keeps its last 
   assert.match(code, /keepalive: /);
 });
 
-test('Settings shows the firstmate bind command line for the Popup, with a copy button', async () => {
-  const html = await readFile(join(WEB, 'index.html'), 'utf8');
-  const code = await readFile(join(WEB, 'shortcut.js'), 'utf8');
+test(
+  'Settings shows the firstmate bind command line for the Popup, with a copy button',
+  async () => {
+    const html = await readFile(join(WEB, 'index.html'), 'utf8');
+    const code = await readFile(join(WEB, 'shortcut.js'), 'utf8');
 
-  assert.match(html, /<code id="bind-command">firstmate bind Ctrl\+Shift\+J scribe jot\.html<\/code>/);
-  assert.match(html, /<button[^>]*id="copy-bind"[^>]*type="button"/);
-  assert.match(code, /navigator\.clipboard\.writeText/);
-});
+    assert.match(
+      html,
+      /<code id="bind-command">firstmate bind Ctrl\+Shift\+J scribe jot\.html<\/code>/,
+    );
+    assert.match(html, /<button[^>]*id="copy-bind"[^>]*type="button"/);
+    assert.match(code, /navigator\.clipboard\.writeText/);
+  },
+);
 
 test('the Calls list shows the Event that starts within five minutes as a banner', async () => {
   const html = await readFile(join(WEB, 'index.html'), 'utf8');
@@ -396,11 +449,19 @@ test('the Calls list shows the Event that starts within five minutes as a banner
   const app = await readFile(join(WEB, 'app.js'), 'utf8');
 
   // A Notice opens #upcoming, so the banner carries that id.
-  const banner = /<div class="event" id="upcoming"[^>]*>([\s\S]*?)<\/div>\s*<p class="next-event"/.exec(html);
+  const banner = /<div class="event" id="upcoming"[^>]*>([\s\S]*?)<\/div>\s*<p class="next-event"/
+    .exec(html);
   assert.ok(banner, 'index.html has no banner with the id a Notice opens');
-  assert.match(banner[1] ?? '', /<a id="upcoming-meet"[^>]*target="_blank"[^>]*>Open the Meet<\/a>/);
-  assert.match(banner[1] ?? '', /<button class="act go" id="upcoming-start" type="button">Start a Call<\/button>/);
-  assert.ok(html.indexOf('id="upcoming"') < html.indexOf('id="start"'), 'the banner is under the list');
+  assert.match(
+    banner[1] ?? '',
+    /<a id="upcoming-meet"[^>]*target="_blank"[^>]*>Open the Meet<\/a>/,
+  );
+  assert.match(
+    banner[1] ?? '',
+    /<button class="act go" id="upcoming-start" type="button">Start a Call<\/button>/,
+  );
+  const under = html.indexOf('id="upcoming"') > html.indexOf('id="start"');
+  assert.ok(!under, 'the banner is under the list');
   assert.match(code, /call\('list_events'\)/);
   assert.match(code, /const SOON_MS = 5 \* 60_000;/);
   assert.match(code, /Date\.parse\(event\.end\) > now/);
@@ -427,12 +488,78 @@ test('the banner is the accent blue, light and dark, and never red', async () =>
   assert.ok(!/--live/.test(rule), 'the banner uses the red of recording');
 });
 
-test('a Call named after its Event says so on its meta line, with Event in the accent', async () => {
-  const code = await readFile(join(WEB, 'app.js'), 'utf8');
-  const css = await readFile(join(WEB, 'app.css'), 'utf8');
+test(
+  'a Call named after its Event says so on its meta line, with Event in the accent',
+  async () => {
+    const code = await readFile(join(WEB, 'app.js'), 'utf8');
+    const css = await readFile(join(WEB, 'app.css'), 'utf8');
 
-  assert.match(code, /found\.event !== null && found\.title === found\.event\.name/);
-  assert.match(code, /className = 'from-event';\s*event\.textContent = 'Event';/);
-  assert.match(code, /callMeta\.append\(' · Title from the ', event\)/);
-  assert.match(css, /\.from-event \{[^}]*color: var\(--accent\)/);
+    assert.match(code, /found\.event !== null && found\.title === found\.event\.name/);
+    assert.match(code, /className = 'from-event';\s*event\.textContent = 'Event';/);
+    assert.match(code, /callMeta\.append\(' · Title from the ', event\)/);
+    assert.match(css, /\.from-event \{[^}]*color: var\(--accent\)/);
+  },
+);
+
+test(
+  'a calendar that cannot be read is said once, quietly, where the next Event shows',
+  async () => {
+    const html = await readFile(join(WEB, 'index.html'), 'utf8');
+    const code = await readFile(join(WEB, 'events.js'), 'utf8');
+
+    const line = /<p class="next-event" id="calendar-unread" hidden>([\s\S]*?)<\/p>/.exec(html);
+    assert.ok(line, 'the Calls list has no line for a calendar that cannot be read');
+    assert.ok(
+      html.indexOf('id="next-event"') < html.indexOf('id="calendar-unread"'),
+      'the line is not where the next Event shows',
+    );
+    assert.match(line[1] ?? '', /scribe cannot read the calendar now/);
+    assert.match(line[1] ?? '', /<a href="#settings">See why in Settings<\/a>/);
+    // The line is the Page's own words: the fault's sentence stays in Settings.
+    assert.match(code, /calendar\.read\.problem === null/);
+    assert.ok(!/textContent = calendar\.read\.problem/.test(code), 'the fault is put on the list');
+  },
+);
+
+test('the Jottings of a recording Call say how to write from anywhere', async () => {
+  const html = await readFile(join(WEB, 'index.html'), 'utf8');
+  const code = await readFile(join(WEB, 'app.js'), 'utf8');
+
+  const hint = /<p class="shortcut-hint" id="shortcut-hint" hidden>([\s\S]*?)<\/p>/.exec(html);
+  assert.ok(hint, 'the Call has no Shortcut hint');
+  assert.ok(
+    html.indexOf('id="call-jottings"') < html.indexOf('id="shortcut-hint"'),
+    'the hint is not under the Jottings',
+  );
+  const words = (hint[1] ?? '').replace(/\s+/g, ' ').trim();
+  assert.equal(
+    words,
+    'Write from anywhere with <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>J</kbd>. ' +
+      'The Popup shows these Jottings.',
+  );
+  assert.match(code, /shortcutHint\.hidden = !isRecording\(found\);/);
 });
+
+test(
+  "the Settings view says when declined Events show, as the calendar's read gives it",
+  async () => {
+    const code = await readFile(join(WEB, 'calendar.js'), 'utf8');
+
+    assert.match(code, /read\.declined === null \? '' : ' ' \+ read\.declined/);
+  },
+);
+
+test(
+  'the Page and the Popup say a time through one time.js, loaded before their script',
+  async () => {
+    for (const { page, script } of [
+      { page: 'index.html', script: 'app.js' },
+      { page: 'jot.html', script: 'jot.js' },
+    ]) {
+      const paths = pathsIn(await readFile(join(WEB, page), 'utf8'));
+
+      assert.ok(paths.includes('time.js'), `${page} does not load time.js`);
+      assert.ok(paths.indexOf('time.js') < paths.indexOf(script), `time.js loads after ${script}`);
+    }
+  },
+);

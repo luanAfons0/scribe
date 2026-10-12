@@ -5,13 +5,16 @@
  * The Events are held in memory and never in `scribe.db`: the calendar is
  * the record of them, and a new read replaces them whole. What the last read
  * gave is one result, a count or the sentence of its fault, for the Settings
- * view to show. A read that fails sends no Notice and ends nothing: scribe
- * records as it did before there were Events.
+ * view to show. A calendar whose name is not its owner's address gives
+ * declined Events too, and the read says so in one sentence. A read that
+ * fails sends no Notice and ends nothing: scribe records as it did before
+ * there were Events.
  *
  * The address is a secret. No sentence here names it, not even a fault's:
  * the network's own message may carry the address, so only its code is said.
  */
-import { eventsBetween, readSeries, type Event, type Series } from './events.ts';
+import type { CallEvent } from './calls.ts';
+import { eventsBetween, readFeed, type Event, type Series } from './events.ts';
 import type { Choices, Settings } from './settings.ts';
 
 /** A feed that sends nothing for this long is not going to answer. */
@@ -25,7 +28,14 @@ export type ReadView = {
   readonly count: number | null;
   /** Why the read failed, as one sentence with no address in it, or null. */
   readonly problem: string | null;
+  /** Why declined Events are not skipped, as one sentence, or null when they are. */
+  readonly declined: string | null;
 };
+
+/** What the read says when the calendar's name gives no owner to skip the declines of. */
+const DECLINED_SHOWN =
+  "Declined Events show too, because the calendar's name is not an address, so scribe " +
+  'cannot tell whose calendar it is.';
 
 /** The calendar, in one running Plugin Server. */
 export type Calendar = {
@@ -60,9 +70,9 @@ export function calendarFor(
     if (address === null) return;
     const mine = (generation += 1);
     reading = true;
-    let result: { series: readonly Series[] } | { problem: string };
+    let result: { series: readonly Series[]; owner: string | null } | { problem: string };
     try {
-      result = { series: readSeries(await fetchFeed(address)) };
+      result = readFeed(await fetchFeed(address));
     } catch (fault) {
       result = { problem: problemOf(fault) };
     }
@@ -71,11 +81,12 @@ export function calendarFor(
     const at = new Date().toISOString();
     if ('series' in result) {
       series = result.series;
-      last = { at, count: series.length, problem: null };
+      const declined = result.owner === null ? DECLINED_SHOWN : null;
+      last = { at, count: series.length, problem: null, declined };
     } else {
       // The Events of the last good read stay: a network that drops for a
       // moment does not lose the next Event.
-      last = { at, count: null, problem: result.problem };
+      last = { at, count: null, problem: result.problem, declined: null };
     }
   };
 
@@ -93,6 +104,23 @@ export function calendarFor(
       void read();
     },
   };
+}
+
+/** A Call started this long before an Event, or later until it ends, is for it. */
+const EVENT_REACH_MS = 5 * 60_000;
+
+/**
+ * The Event a Call started at `at` is for: one that starts within five minutes
+ * or has started and not ended. Of two, the one that started last wins, as
+ * the operator leaves the older one for it.
+ */
+export function eventAt(calendar: Pick<Calendar, 'between'>, at: number): CallEvent | null {
+  const inReach = calendar.between(at, at + EVENT_REACH_MS);
+  const last = inReach.reduce<Event | null>(
+    (latest, event) => (latest === null || event.start > latest.start ? event : latest),
+    null,
+  );
+  return last === null ? null : { name: last.name, start: new Date(last.start).toISOString() };
 }
 
 /** The feed's text, or a fault that says why it could not be read. */

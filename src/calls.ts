@@ -7,7 +7,6 @@
  * the Store holds as a unique index, so two Calls never mix.
  */
 import type { Track } from './audio.ts';
-import type { Calendar } from './calendar.ts';
 import { badInput } from './mcp.ts';
 import type { Made } from './minutes.ts';
 import { now, type Store } from './store.ts';
@@ -142,23 +141,6 @@ export function startCall(store: Store, event: CallEvent | null = null): CallSum
       event?.start ?? null,
     ) as CallRow;
   return summaryOf(row);
-}
-
-/** A Call started this long before an Event, or later until it ends, is for it. */
-const EVENT_REACH_MS = 5 * 60_000;
-
-/**
- * The Event a Call started at `at` is for: one that starts within five minutes
- * or has started and not ended. Of two, the one that started last wins, as
- * the operator leaves the older one for it.
- */
-export function eventAt(calendar: Pick<Calendar, 'between'>, at: number): CallEvent | null {
-  const inReach = calendar.between(at, at + EVENT_REACH_MS);
-  const last = inReach.reduce<(typeof inReach)[number] | null>(
-    (latest, event) => (latest === null || event.start > latest.start ? event : latest),
-    null,
-  );
-  return last === null ? null : { name: last.name, start: new Date(last.start).toISOString() };
 }
 
 /** End a Call that records: `ended` by Stop, or `cut` when it went away. */

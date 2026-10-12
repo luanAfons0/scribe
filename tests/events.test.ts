@@ -13,58 +13,25 @@ import { createServer } from 'node:net';
 import test, { type TestContext } from 'node:test';
 import { startedAndShaken, structureOf, type Started } from './helpers/plugin.ts';
 import { serveFiles, type Route } from './helpers/server.ts';
-
-/** The path the feed is served at, shaped as Google shapes a secret address. */
-const FEED = '/calendar/ical/operador%40example.com/private-0f9e8d7c6b5a43210/basic.ics';
-
-/** The part of the address that makes it a secret. */
-const SECRET = 'private-0f9e8d7c6b5a43210';
-
-/** The calendar's owner, as Google names it in the feed. */
-const OWNER = 'operador@example.com';
-
-const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
+import {
+  FEED,
+  HOUR,
+  MINUTE,
+  OWNER,
+  SECRET,
+  feed,
+  feedCalled,
+  readSince,
+  secret,
+  timed,
+  utc,
+  vevent,
+  withFeed,
+  type Secret,
+} from './helpers/calendar.ts';
 
 /** One Event, as list_events answers it. */
 type Event = { name: string; start: string; end: string; meet: string };
-
-/** A time as iCal writes it in UTC: 20261012T140000Z. */
-function utc(ms: number): string {
-  return new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-}
-
-/** One VEVENT: the lines given, between its BEGIN and END. */
-function vevent(...lines: readonly string[]): string {
-  return ['BEGIN:VEVENT', ...lines, 'END:VEVENT'].join('\r\n');
-}
-
-/** An Event that starts at `start` and lasts an hour, with these lines more. */
-function timed(uid: string, name: string, start: number, ...more: readonly string[]): string {
-  return vevent(
-    `UID:${uid}`,
-    `DTSTART:${utc(start)}`,
-    `DTEND:${utc(start + HOUR)}`,
-    `SUMMARY:${name}`,
-    ...more,
-  );
-}
-
-/** A whole feed of these VEVENTs, as Google writes it, with CRLF line ends. */
-function feed(...events: readonly string[]): Buffer {
-  return Buffer.from(
-    [
-      'BEGIN:VCALENDAR',
-      'PRODID:-//Google Inc//Google Calendar 70.9054//EN',
-      'VERSION:2.0',
-      `X-WR-CALNAME:${OWNER}`,
-      'X-WR-TIMEZONE:America/Sao_Paulo',
-      ...events,
-      'END:VCALENDAR',
-      '',
-    ].join('\r\n'),
-  );
-}
 
 /** The owner's ATTENDEE line, with this PARTSTAT. */
 function owner(partstat: string): string {
@@ -72,36 +39,6 @@ function owner(partstat: string): string {
     `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=${partstat};CN=${OWNER};` +
     `X-NUM-GUESTS=0:mailto:${OWNER}`
   );
-}
-
-/** The calendar's address, as get_settings tells it. */
-type Secret = {
-  set: boolean;
-  saved: boolean;
-  from: string;
-  variable: string;
-  problem: string | null;
-  ignored: string | null;
-  read: { at: string; count: number | null; problem: string | null } | null;
-};
-
-/** The calendar's address, as get_settings tells it now. */
-async function secret(plugin: Started): Promise<Secret> {
-  return structureOf<{ settings: { calendarUrl: Secret } }>(await plugin.call('get_settings'))
-    .settings.calendarUrl;
-}
-
-/** Wait until the calendar has been read since `after`, and hand back what it gave. */
-async function readSince(plugin: Started, after = ''): Promise<NonNullable<Secret['read']>> {
-  const started = Date.now();
-  for (;;) {
-    const { read } = await secret(plugin);
-    if (read !== null && read.at > after) return read;
-    if (Date.now() - started > 5_000) {
-      throw new Error(`the calendar was never read: ${JSON.stringify(read)}\n${plugin.output()}`);
-    }
-    await new Promise((done) => setTimeout(done, 25));
-  }
 }
 
 /** An address on loopback where nothing listens. */
@@ -133,20 +70,6 @@ async function eventsUntil(
     }
     await new Promise((done) => setTimeout(done, 25));
   }
-}
-
-/** A Plugin Server with the feed's address saved, as the operator saves it. */
-async function withFeed(
-  t: TestContext,
-  routes: Record<string, Route>,
-  env: Readonly<Record<string, string>> = {},
-): Promise<{ plugin: Started; address: string }> {
-  const served = await serveFiles(t, routes);
-  const plugin = await startedAndShaken(t, { env });
-  const address = served.url(FEED);
-  const saved = await plugin.call('update_settings', { calendarUrl: address });
-  assert.equal(saved.error, undefined, saved.error?.message);
-  return { plugin, address };
 }
 
 test('list_events returns an Event with a Meet link in its conference data', async (t) => {
@@ -231,7 +154,10 @@ test('only Events from now to the next day are returned, one under way too', asy
 
   const found = await eventsUntil(plugin, (listed) => listed.length > 0);
 
-  assert.deepEqual(found.map((event) => event.name), ['Planning', 'Daily']);
+  assert.deepEqual(
+    found.map((event) => event.name),
+    ['Planning', 'Daily'],
+  );
 });
 
 test('a declined Event, a cancelled Event and an all-day Event are not returned', async (t) => {
@@ -242,12 +168,7 @@ test('a declined Event, a cancelled Event and an all-day Event are not returned'
     [FEED]: feed(
       timed('declined@google.com', 'Recusado', now + HOUR, link, owner('DECLINED')),
       timed('cancelled@google.com', 'Cancelado', now + HOUR, link, 'STATUS:CANCELLED'),
-      vevent(
-        'UID:allday@google.com',
-        `DTSTART;VALUE=DATE:${day}`,
-        'SUMMARY:Dia todo',
-        link,
-      ),
+      vevent('UID:allday@google.com', `DTSTART;VALUE=DATE:${day}`, 'SUMMARY:Dia todo', link),
       timed(
         'other@google.com',
         'Aceito',
@@ -261,8 +182,48 @@ test('a declined Event, a cancelled Event and an all-day Event are not returned'
 
   const found = await eventsUntil(plugin, (listed) => listed.length > 0);
 
-  assert.deepEqual(found.map((event) => event.name), ['Aceito']);
+  assert.deepEqual(
+    found.map((event) => event.name),
+    ['Aceito'],
+  );
 });
+
+test(
+  "when the calendar's name gives no owner, a declined Event shows, and the read says why",
+  async (t) => {
+    const now = Date.now();
+    const link = 'X-GOOGLE-CONFERENCE:https://meet.google.com/abc-defg-hij';
+    const { plugin } = await withFeed(t, {
+      [FEED]: feedCalled(
+        'Trabalho',
+        timed('declined@google.com', 'Recusado', now + HOUR, link, owner('DECLINED')),
+      ),
+    });
+
+    const found = await eventsUntil(plugin, (listed) => listed.length > 0);
+    const read = await readSince(plugin);
+
+    assert.deepEqual(found.map((event) => event.name), ['Recusado']);
+    assert.equal(
+      read.declined,
+      "Declined Events show too, because the calendar's name is not an address, so scribe " +
+        'cannot tell whose calendar it is.',
+    );
+  },
+);
+
+test(
+  "when the calendar's name is its owner's address, the read says nothing of declines",
+  async (t) => {
+    const { plugin } = await withFeed(t, {
+      [FEED]: feed(timed('a@google.com', 'Daily', Date.now() + HOUR, 'LOCATION:x')),
+    });
+
+    const read = await readSince(plugin);
+
+    assert.equal(read.declined, null);
+  },
+);
 
 test('a start in a time zone of its own is read at the right instant', async (t) => {
   // São Paulo is UTC-3 and Kolkata UTC+5:30 all year, so the wall time there
@@ -294,11 +255,7 @@ test('a start in a time zone of its own is read at the right instant', async (t)
   assert.deepEqual(
     found.map((event) => [event.name, event.start, event.end]),
     [
-      [
-        'São Paulo',
-        new Date(start).toISOString(),
-        new Date(start + 30 * MINUTE).toISOString(),
-      ],
+      ['São Paulo', new Date(start).toISOString(), new Date(start + 30 * MINUTE).toISOString()],
       ['Kolkata', new Date(start + HOUR).toISOString(), new Date(start + 2 * HOUR).toISOString()],
     ],
   );
@@ -375,7 +332,9 @@ test('the address is read again every SCRIBE_CALENDAR_READ_MS', async (t) => {
   const routes: Record<string, Route> = {
     [FEED]: feed(timed('a@google.com', 'Daily', now + HOUR, link)),
   };
-  const { plugin } = await withFeed(t, routes, { SCRIBE_CALENDAR_READ_MS: '100' });
+  const { plugin } = await withFeed(t, routes, {
+    SCRIBE_CALENDAR_READ_MS: '100',
+  });
   await eventsUntil(plugin, (listed) => listed.length === 1);
 
   routes[FEED] = feed(
@@ -384,7 +343,10 @@ test('the address is read again every SCRIBE_CALENDAR_READ_MS', async (t) => {
   );
   const found = await eventsUntil(plugin, (listed) => listed.length === 2);
 
-  assert.deepEqual(found.map((event) => event.name), ['Daily', 'Added today']);
+  assert.deepEqual(
+    found.map((event) => event.name),
+    ['Daily', 'Added today'],
+  );
 });
 
 test('get_settings says the address is set, never what it is, and null clears it', async (t) => {
@@ -424,7 +386,9 @@ test('SCRIBE_CALENDAR_URL beats the file; one not in its form is ignored, unshow
       timed('a@google.com', 'Daily', Date.now() + HOUR, 'LOCATION:https://meet.google.com/x-y-z'),
     ),
   });
-  const plugin = await startedAndShaken(t, { env: { SCRIBE_CALENDAR_URL: served.url(FEED) } });
+  const plugin = await startedAndShaken(t, {
+    env: { SCRIBE_CALENDAR_URL: served.url(FEED) },
+  });
   const wrong = await startedAndShaken(t, {
     env: { SCRIBE_CALENDAR_URL: `not an address ${SECRET}` },
   });
@@ -433,7 +397,10 @@ test('SCRIBE_CALENDAR_URL beats the file; one not in its form is ignored, unshow
   const fromVariable = await secret(plugin);
   const ignored = await secret(wrong);
 
-  assert.deepEqual(found.map((event) => event.name), ['Daily']);
+  assert.deepEqual(
+    found.map((event) => event.name),
+    ['Daily'],
+  );
   assert.equal(fromVariable.from, 'environment');
   assert.equal(fromVariable.set, true);
   assert.equal(fromVariable.saved, false);
@@ -523,10 +490,13 @@ test('COUNT and INTERVAL are kept; a daily and a monthly rule give their time', 
 
   const found = await eventsUntil(plugin, (listed) => listed.length > 0);
 
-  assert.deepEqual(
-    found.map((event) => event.name).sort(),
-    ['Daily', 'Every 2 days', 'Monthly', 'Monthly by weekday', 'Sixth time'],
-  );
+  assert.deepEqual(found.map((event) => event.name).sort(), [
+    'Daily',
+    'Every 2 days',
+    'Monthly',
+    'Monthly by weekday',
+    'Sixth time',
+  ]);
   assert.deepEqual(new Set(found.map((event) => event.start)), new Set([iso(start)]));
 });
 
@@ -631,7 +601,10 @@ test('a TZID keeps the wall time of a weekly Event across daylight saving time',
 
   const found = await eventsUntil(plugin, (listed) => listed.length > 0);
 
-  assert.deepEqual(found.map((event) => [event.name, event.start]), [['Stand-up', iso(start)]]);
+  assert.deepEqual(
+    found.map((event) => [event.name, event.start]),
+    [['Stand-up', iso(start)]],
+  );
 });
 
 test('a rule scribe does not read gives no Event, not a guessed one', async (t) => {
@@ -655,7 +628,10 @@ test('a rule scribe does not read gives no Event, not a guessed one', async (t) 
 
   const found = await eventsUntil(plugin, (listed) => listed.length > 0);
 
-  assert.deepEqual(found.map((event) => event.name), ['Read']);
+  assert.deepEqual(
+    found.map((event) => event.name),
+    ['Read'],
+  );
 });
 
 test('a rule that never comes back gives no time, and list_events answers', async (t) => {
@@ -677,5 +653,8 @@ test('a rule that never comes back gives no time, and list_events answers', asyn
 
   const found = await eventsUntil(plugin, (listed) => listed.length > 0);
 
-  assert.deepEqual(found.map((event) => event.name), ['Read']);
+  assert.deepEqual(
+    found.map((event) => event.name),
+    ['Read'],
+  );
 });

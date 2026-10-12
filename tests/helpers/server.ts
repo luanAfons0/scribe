@@ -85,7 +85,10 @@ export type Download = {
 };
 
 /** A whisper.cpp build, as the list of downloads names it. */
-export type Build = Download & { readonly format: 'zip' | 'tar.gz' | 'tar.bz2'; readonly program: string };
+export type Build = Download & {
+  readonly format: 'zip' | 'tar.gz' | 'tar.bz2';
+  readonly program: string;
+};
 
 /** A model, as the list of downloads names it. */
 export type Model = Download & { readonly name: string };

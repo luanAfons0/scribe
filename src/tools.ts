@@ -13,7 +13,6 @@ import {
   checkMinutes,
   checkTitle,
   deleteCall,
-  eventAt,
   listCalls,
   recordingCall,
   renameCall,
@@ -21,7 +20,7 @@ import {
   saveMinutes,
   viewOf,
 } from './calls.ts';
-import type { Calendar } from './calendar.ts';
+import { eventAt, type Calendar } from './calendar.ts';
 import type { Fetcher } from './fetcher.ts';
 import { badInput } from './mcp.ts';
 import type { Tool, ToolResult } from './mcp.ts';
@@ -270,9 +269,11 @@ export function toolsFor(parts: Parts): readonly Tool[] {
         'is missing or wrong, or null; and ignored, the one sentence that says its variable ' +
         'is set, not in its form, and ignored, or null. calendarUrl, the calendar\'s secret ' +
         'iCal address, is never shown: it has set and saved as true or false in place of ' +
-        'value and saved, and read, what the last read gave: { at, count, problem }, where ' +
-        'count is how many Events the calendar holds and problem the sentence of a read ' +
-        'that failed, or null before the first read.',
+        'value and saved, and read, what the last read gave: { at, count, problem, ' +
+        'declined }, where count is how many Events the calendar holds, problem the ' +
+        'sentence of a read that failed, and declined the sentence that says declined ' +
+        'Events are not skipped, as the calendar\'s name gives no owner; or null before ' +
+        'the first read.',
       inputSchema: { type: 'object', properties: {}, required: [] },
       call: () => told({ settings: settingsView() }),
     },

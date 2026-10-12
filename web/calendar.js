@@ -6,7 +6,8 @@
    is typed into the field, sent once with Save, and the field is emptied.
 
    Under it, what the last read gave: how many Events the calendar holds and
-   the next one, or the sentence of the fault.
+   the next one, or the sentence of the fault; and, when the calendar's name
+   gives no owner, that declined Events show too.
 
    settings.js calls drawCalendar() when it draws the settings, and
    calendarGiven() when it saves them. */
@@ -59,13 +60,16 @@ async function drawCalendarRead(calendar) {
     said.textContent = when;
     return;
   }
+  // A calendar with no owner to read gives declined Events too: one sentence says so.
+  const declined = read.declined === null ? '' : ' ' + read.declined;
   const events = (await call('list_events')).events;
   const next = events.find((event) => Date.parse(event.start) > Date.now()) || events[0];
   said.textContent =
     when + ' ' + read.count + (read.count === 1 ? ' Event. ' : ' Events. ') +
     (next === undefined
       ? 'No Event in the next day.'
-      : 'Next Event: ' + next.name + ', ' + dayAndTime(next.start) + '.');
+      : 'Next Event: ' + next.name + ', ' + dayAndTime(next.start) + '.') +
+    declined;
 }
 
 /** How long ago an instant was, as the read line says it. */

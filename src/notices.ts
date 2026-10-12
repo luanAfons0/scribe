@@ -81,7 +81,9 @@ function noticeFor(event: Event, now: number): Notice {
   const name = oneLine(event.name) || 'An Event';
   return {
     title: `${shorten(name, TITLE_LIMIT - [...after].length)}${after}`,
-    body: `Starts at ${timeOfDay(event.start)} on Google Meet. To record it, start a Call in scribe.`,
+    body:
+      `Starts at ${timeOfDay(event.start)} on Google Meet. ` +
+      'To record it, start a Call in scribe.',
     path: NOTICE_PATH,
   };
 }

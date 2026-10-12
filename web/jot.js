@@ -42,23 +42,10 @@ function say(fault) {
 
 const jottings = keepJottings(jotBox, say);
 
-/** A moment as this person reads it: their own date and time. */
-function when(iso) {
-  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-}
-
-/** A length of time as a clock reads it: 4:05, or 1:02:07. */
-function clock(ms) {
-  const seconds = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor(seconds / 60) % 60;
-  const s = String(seconds % 60).padStart(2, '0');
-  return h > 0 ? h + ':' + String(m).padStart(2, '0') + ':' + s : m + ':' + s;
-}
-
 /** How long the Call that records has run. */
 function tick() {
-  if (recording !== null) timeText.textContent = clock(Date.now() - Date.parse(recording.startedAt));
+  if (recording === null) return;
+  timeText.textContent = clock(Date.now() - Date.parse(recording.startedAt));
 }
 
 /** Draw the Call that records, or the empty state, and ask again soon. */

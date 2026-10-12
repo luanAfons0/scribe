@@ -41,6 +41,17 @@ type Until =
   | { readonly kind: 'time'; readonly ms: number }
   | { readonly kind: 'day'; readonly day: number };
 
+/** How a Series recurs: its rule, from the wall time of its first time. */
+export type Repeat = {
+  readonly rule: Rule;
+  /** The wall time of the first time, which the rule repeats. */
+  readonly wall: Wall;
+  /** The zone of that wall time. */
+  readonly zone: Zone;
+  /** The starts that do not happen: each EXDATE and each RECURRENCE-ID of the UID. */
+  readonly except: ReadonlySet<number>;
+};
+
 /** An RRULE scribe can read. */
 export type Rule = {
   readonly freq: 'DAILY' | 'WEEKLY' | 'MONTHLY';
@@ -91,11 +102,12 @@ export function readRule(value: string, zone: Zone): Rule | null {
 }
 
 /**
- * Every instant the rule starts a time at, from `from` until before `to`.
- * The first time, the wall time `first` in `zone`, always counts, as it does
- * for COUNT.
+ * Every instant the rule starts a time at, from `from` until before `to`,
+ * but the starts it takes out. The first time, the wall time of the Repeat in
+ * its zone, always counts toward COUNT, even when it is taken out.
  */
-export function startsOf(rule: Rule, first: Wall, zone: Zone, from: number, to: number): number[] {
+export function startsOf(repeat: Repeat, from: number, to: number): number[] {
+  const { rule, wall: first, zone, except } = repeat;
   const starts: number[] = [];
   const clock = ((first.hour * 60 + first.minute) * 60 + first.second) * 1000;
   let counted = 0;
@@ -116,7 +128,7 @@ export function startsOf(rule: Rule, first: Wall, zone: Zone, from: number, to: 
     const start = instantOf({ ...wallOf(day), hour, minute, second }, zone);
     if (start === null) break;
     if (until?.kind === 'time' && start > until.ms) break;
-    if (start >= from && start < to) starts.push(start);
+    if (start >= from && start < to && !except.has(start)) starts.push(start);
   }
   return starts;
 }

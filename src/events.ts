@@ -24,10 +24,8 @@ import {
   textOf,
   whenOf,
   type Component,
-  type Wall,
-  type Zone,
 } from './ical.ts';
-import { readRule, startsOf, type Rule } from './recurrence.ts';
+import { readRule, startsOf, type Repeat } from './recurrence.ts';
 
 /** One Event, as scribe holds it in memory. A Call keeps only its name and start. */
 export type Event = {
@@ -56,31 +54,27 @@ export type Series = {
   readonly repeat: Repeat | null;
 };
 
-/** How a Series recurs: its rule, from the wall time of its first time. */
-type Repeat = {
-  readonly rule: Rule;
-  /** The wall time of the first time, which the rule repeats. */
-  readonly wall: Wall;
-  /** The zone of that wall time. */
-  readonly zone: Zone;
-  /** The starts that do not happen here: each EXDATE and each RECURRENCE-ID of the UID. */
-  readonly except: ReadonlySet<number>;
-};
-
 /** The first Google Meet link in a text. */
 const MEET = /https:\/\/meet\.google\.com\/[A-Za-z0-9\-_/?=&.%]+/;
 
+/** A feed, read: its Series, and the calendar's owner when its name gives one. */
+export type Feed = {
+  readonly series: readonly Series[];
+  /** The owner's address, or null: then no Event is skipped as declined. */
+  readonly owner: string | null;
+};
+
 /** Read a feed into its Series, or throw when the text is not an iCal calendar. */
-export function readSeries(text: string): readonly Series[] {
+export function readFeed(text: string): Feed {
   const calendar = readCalendar(text);
   const name = first(calendar.properties, 'X-WR-CALNAME');
   const owner = name !== undefined && name.value.includes('@') ? name.value.trim() : null;
   const replaced = replacedTimes(calendar.events);
-  return calendar.events.flatMap((component) => {
-    const uid = first(component, 'UID')?.value.trim() ?? '';
-    const series = seriesOf(component, owner, replaced.get(uid) ?? []);
-    return series === null ? [] : [series];
+  const series = calendar.events.flatMap((component) => {
+    const one = seriesOf(component, owner, replaced.get(uidOf(component)) ?? []);
+    return one === null ? [] : [one];
   });
+  return { series, owner };
 }
 
 /** Every Event of these Series that has not ended at `from` and starts before `to`, by start. */
@@ -96,9 +90,7 @@ function occurrencesOf(series: Series, from: number, to: number): Event[] {
   const starts =
     repeat === null
       ? [series.start]
-      : startsOf(repeat.rule, repeat.wall, repeat.zone, from - length, to).filter(
-          (start) => !repeat.except.has(start),
-        );
+      : startsOf(repeat, from - length, to);
   return starts
     .filter((start) => start + length > from && start < to)
     .map((start) => ({
@@ -120,7 +112,7 @@ function replacedTimes(components: readonly Component[]): Map<string, number[]> 
     const line = first(component, 'RECURRENCE-ID');
     const when = line === undefined ? null : whenOf(line);
     if (when?.kind !== 'time') continue;
-    const uid = first(component, 'UID')?.value.trim() ?? '';
+    const uid = uidOf(component);
     replaced.set(uid, [...(replaced.get(uid) ?? []), when.ms]);
   }
   return replaced;
@@ -154,13 +146,18 @@ function seriesOf(
     repeat = { rule, wall: start.wall, zone: start.zone, except };
   }
   return {
-    uid: first(component, 'UID')?.value.trim() ?? '',
+    uid: uidOf(component),
     name: textOf(first(component, 'SUMMARY')?.value ?? '').trim(),
     meet,
     start: start.ms,
     length,
     repeat,
   };
+}
+
+/** The UID of a VEVENT, or '' when it has none. */
+function uidOf(component: Component): string {
+  return first(component, 'UID')?.value.trim() ?? '';
 }
 
 /** The starts every EXDATE line takes out. One line may hold several, with commas. */

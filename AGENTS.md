@@ -121,14 +121,16 @@ web/           the Plugin Page, as the Host serves it.
                and what its last read gave.
   events.js    the Calls list's Event: a banner from five minutes before it
                until it ends, or the next one in one line.
-  downloads.js the offers to fetch whisper.cpp, a model and Speakers, and how
-               far each download got.
+  downloads.js the offers to fetch whisper.cpp, a model and the diarizer, and
+               how far each download got.
   jottings.js  keepJottings(): the box that keeps every change at once, and
                takes the text the Popup saved.
   jot.html     the Popup a Shortcut opens: the Jottings of the Call that
                records, and Stop. It never records (ADR-0008).
   jot.js       draws jot.html. jot.css is its look, on top of app.css.
   shortcut.js  the Settings view's firstmate bind command line, and Copy.
+  time.js      a moment and a length of time, as the Page and the Popup say
+               them.
   markdown.js  the small Markdown renderer for the Minutes, as Worklog's.
   capture.js   startCapture(): the capture's sound and the mic, sent in chunks
                (ADR-0008).

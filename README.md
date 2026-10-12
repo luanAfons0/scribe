@@ -22,10 +22,11 @@ is recorded in the FirstMate window and why the Minutes come from a command.
   the CPU. scribe fetches both from its Plugin Page when you ask, on Windows
   and on Linux, x64 and arm64. You can also build whisper.cpp yourself. On
   Windows the executable is `whisper-cli.exe`.
-- **sherpa-onnx's diarizer**, optional, which tells the people in the call's
-  sound apart into Speakers after a Call stops. scribe fetches it from its
-  Plugin Page when you ask, on Windows x64 and Linux x64. Without it, scribe
-  works as before, and their lines stay `Outros`.
+- **sherpa-onnx's diarizer**, optional, which will tell the people in the
+  call's sound apart into Speakers after a Call stops. scribe fetches it from
+  its Plugin Page when you ask, on Windows x64 and Linux x64. The fetch is
+  ready, but scribe does not run the diarizer yet: that comes with #28. Until
+  then, the lines from the call's sound stay `Outros`.
 - **The FirstMate App on Windows**, to record a Call. scribe records in the
   App's window, and the App gives a capture its sound on Windows only. On
   Linux, scribe runs, but it refuses to start a Call (see "Record a Call").
@@ -55,9 +56,9 @@ The Linux builds are the ones whisper.cpp makes on Ubuntu: they need glibc
 publishes no build for the system, such as macOS, the Page says so and how to
 build one; build it as below and give its path.
 
-### Get Speakers from the Plugin Page
+### Get the diarizer from the Plugin Page
 
-Press **Fetch Speakers** under Speakers, in the Settings view. scribe fetches
+Press **Fetch the diarizer** under Diarizer, in the Settings view. scribe fetches
 three files from sherpa-onnx's GitHub releases, each checked against the
 SHA-256 pinned in `src/downloads.json`: the sherpa-onnx 1.13.8 build for this
 system, the pyannote segmentation 3.0 model and the 3D-Speaker CAM++ VoxCeleb
@@ -124,7 +125,7 @@ shell or a systemd service.
 | Minutes command        | The command that makes the Minutes, as a JSON array: the program, then its arguments. Optional; see below. |
 | Worklog Plugin         | The Registry name of the Worklog Plugin that Send to Worklog sends to. Optional; see below. |
 | Calendar               | Your Google Calendar's secret iCal address, for its Events. Optional; see "Events" below. |
-| Speakers               | The diarizer directory, which **Fetch Speakers** sets. Optional; see "Get Speakers from the Plugin Page". |
+| Diarizer               | The diarizer directory, which **Fetch the diarizer** sets. Optional; see "Get the diarizer from the Plugin Page". |
 
 scribe keeps them in `settings.json`, in its own Plugin directory, beside
 `scribe.db`. A field left empty is none. A value that is not in its form, such
@@ -159,7 +160,7 @@ Host's systemd drop-in, and set the Minutes command on the Page instead.
 | `SCRIBE_MINUTES_COMMAND` | The Minutes command, as a JSON array.                   |
 | `SCRIBE_WORKLOG_PLUGIN`  | The Worklog Plugin.                                     |
 | `SCRIBE_CALENDAR_URL`    | The calendar's secret iCal address. scribe never prints it. |
-| `SCRIBE_DIARIZER`        | The diarizer directory: its program and its two models, as in "Get Speakers from the Plugin Page". |
+| `SCRIBE_DIARIZER`        | The diarizer directory: its program and its two models, as in "Get the diarizer from the Plugin Page". |
 
 These are set in the environment alone:
 
@@ -198,7 +199,10 @@ scribe reads the address at start, every five minutes, and when you save it.
 It holds the Events in memory, not in `scribe.db`. An Event is an entry
 with a Google Meet link, in its conference data or else in its description
 or location. scribe skips an entry that is all day, cancelled, or that you
-declined. The `list_events` tool gives the Events from now to the next day:
+declined. You are the calendar's owner, whose address Google writes as the
+calendar's name. When that name is not an address, scribe cannot tell who
+declined, so declined Events show too, and Settings says so in one sentence.
+The `list_events` tool gives the Events from now to the next day:
 the name, the start, the end and the Meet link of each, and nothing else.
 
 A recurring entry, such as a weekly 1:1 or a daily stand-up, gives each of
@@ -217,8 +221,8 @@ A click on the Notice opens scribe at the Event.
 
 On the Calls list, a banner shows the Event from five minutes before it
 until it ends, with **Open the Meet** and **Start a Call**. Further away, one
-line says the next Event. A calendar that cannot be read sends no Notice:
-Settings says why.
+line says the next Event. A calendar that cannot be read sends no Notice.
+The Calls list says so once, in one quiet line, and Settings says why.
 
 A Call you start from five minutes before an Event until it ends is for
 that Event. It takes the Event's name as its title, as if you gave it with
@@ -371,14 +375,14 @@ firstmate grant scribe worklog
 Then set **Worklog Plugin** to `worklog` in Settings. With none set, the
 button is disabled, and the page says where to set it.
 
-The page then says when the Topics were sent, and the list of Calls marks a
-sent Call. Making the Minutes again sends nothing. When it writes other
+The page then says when the Topics were sent, such as "Sent to Worklog today
+at 14:55", and the list of Calls marks a sent Call. Making the Minutes again sends nothing. When it writes other
 Topics, the page says "The Topics changed since you sent them", and
 **Send again** changes the same Entry rather than adding one. When Worklog
 says that Entry is gone, because you deleted it there, scribe makes a new one
 and keeps it. When
 the Entry cannot be sent — no Grant, Worklog Stopped, or no answer — the Call
-stays unsent, and the page says why. A Call with no Topics, because it still
+stays unsent, the page says why, and the button says **Send again**. A Call with no Topics, because it still
 records or its Minutes are not made, has no button.
 
 Another Plugin with a Grant to scribe sends the same way, with the
@@ -416,7 +420,8 @@ Use the keys you want. Settings shows this line, with a Copy button. During a
 Call, press the Shortcut: FirstMate opens the Popup over the call. It shows
 the whole Jottings of the Call that records, and **Stop**. Every change is kept
 at once, so the Popup loses nothing when it hides. **Esc** hides it, and so
-does a click back into the call. The Call's page reads the Jottings again when
+does a click back into the call. Under the Jottings of a Call that records,
+the Call's page says the keys. The Call's page reads the Jottings again when
 it gets focus, so the two never write an old copy over each other.
 
 The Popup never records: a Call records only on scribe's page in the

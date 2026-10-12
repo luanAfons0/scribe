@@ -132,7 +132,7 @@ export function instantOf(wall: Wall, zone: Zone): number | null {
   if (zone === 'UTC') return Date.UTC(year, month - 1, day, hour, minute, second);
   if (zone === null) return new Date(year, month - 1, day, hour, minute, second).getTime();
   try {
-    return wallTimeIn(zone, year, month, day, hour, minute, second);
+    return wallTimeIn(zone, wall);
   } catch {
     return null;
   }
@@ -199,20 +199,13 @@ function splitOutsideQuotes(text: string, on: string): string[] {
 const formatters = new Map<string, Intl.DateTimeFormat>();
 
 /** The instant a wall time in this IANA time zone is. Throws on a zone Intl does not know. */
-function wallTimeIn(
-  zone: string,
-  year: number,
-  month: number,
-  day: number,
-  hour: number,
-  minute: number,
-  second: number,
-): number {
-  const wall = Date.UTC(year, month - 1, day, hour, minute, second);
+function wallTimeIn(zone: string, wall: Wall): number {
+  const { year, month, day, hour, minute, second } = wall;
+  const asUtc = Date.UTC(year, month - 1, day, hour, minute, second);
   // The zone's offset at the wall time read as UTC is right but near a change
   // of offset; a second look at the instant that gives settles it.
-  const guess = wall - offsetIn(zone, wall);
-  return wall - offsetIn(zone, guess);
+  const guess = asUtc - offsetIn(zone, asUtc);
+  return asUtc - offsetIn(zone, guess);
 }
 
 /** How far ahead of UTC this time zone's wall clock is at this instant, in ms. */

@@ -11,7 +11,7 @@
  * is not set: it decides nothing. One that is not in its form decides nothing
  * either, and the settings tools say it is ignored (ADR-0004).
  *
- * None of the five ends the Plugin Server, and neither does a settings file
+ * None of the six ends the Plugin Server, and neither does a settings file
  * that cannot be read (ADR-0004): a Plugin Server that is up keeps its Plugin
  * Page, and the Page is where they are fixed. What is missing or wrong is one
  * sentence, beside the setting on the Page and as the refusal of whatever
@@ -216,11 +216,6 @@ export type Choices = {
   worklogPlugin(): string | null;
   /** The calendar's secret iCal address, or null when there is no Event. Never shown. */
   calendarUrl(): string | null;
-  /**
-   * The diarizer, or null when none is set: then the call's sound is not told
-   * apart. One that is set and not whole is refused with its sentence.
-   */
-  diarizer(): Diarizer | null;
   /** Every setting, as the settings tools tell them. */
   view(): SettingsView;
   /** Keep the given settings in the file, or refuse every one with a sentence. */
@@ -260,11 +255,12 @@ type Spec = {
 const PLUGIN_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /**
- * The four settings, as data. The form is all `update_settings` checks
- * (ADR-0004): an absolute path for whisper.cpp and its model, a program and its
- * arguments for the Minutes command (ADR-0003), a Registry name for the
- * Worklog Plugin. Whether a path leads to a file is the check, read each time
- * and shown beside the setting as its problem.
+ * The six settings, as data. The form is all `update_settings` checks
+ * (ADR-0004): an absolute path for whisper.cpp, its model and the diarizer, a
+ * program and its arguments for the Minutes command (ADR-0003), a Registry
+ * name for the Worklog Plugin, and a web address for the calendar. Whether a
+ * path leads to a file is the check, read each time and shown beside the
+ * setting as its problem.
  */
 const SPECS: { readonly [name in Chosen]: Spec } = {
   whisper: {
@@ -322,9 +318,8 @@ const SPECS: { readonly [name in Chosen]: Spec } = {
     json: false,
     secret: false,
     form: absolutePath,
-    check: (spec, setting) => (setting.value === null && setting.unread === null
-      ? null
-      : diarizerIn(spec, setting)),
+    // No diarizer is no problem: the call's sound stays Outros (ADR-0007).
+    check: (spec, setting) => (isSet(setting) ? diarizerIn(spec, setting) : null),
   },
 };
 
@@ -434,10 +429,7 @@ export function openChoices(
 
     minutesCommand: () => foundCommand(SPECS.minutesCommand, given('minutesCommand')),
 
-    minutesCommandSet: () => {
-      const setting = given('minutesCommand');
-      return setting.value !== null || setting.unread !== null;
-    },
+    minutesCommandSet: () => isSet(given('minutesCommand')),
 
     worklogPlugin: () => {
       const setting = given('worklogPlugin');
@@ -447,12 +439,6 @@ export function openChoices(
     calendarUrl: () => {
       const setting = given('calendarUrl');
       return typeof setting.value === 'string' ? setting.value : null;
-    },
-
-    diarizer: () => {
-      const setting = given('diarizer');
-      if (setting.value === null && setting.unread === null) return null;
-      return diarizerIn(SPECS.diarizer, setting);
     },
 
     view: () => {
@@ -501,6 +487,11 @@ export function openChoices(
       broken = null;
     },
   };
+}
+
+/** Whether a setting is set at all, in its form or not. */
+function isSet(setting: Given): boolean {
+  return setting.value !== null || setting.unread !== null;
 }
 
 /** An absolute path, trimmed, or null when the value is not one. */
@@ -574,7 +565,7 @@ function diarizerIn(spec: Spec, setting: Given): Diarizer {
   const fix =
     setting.from === 'environment'
       ? `change ${spec.variable} where the Host is started`
-      : 'fetch Speakers again in Settings';
+      : 'fetch the diarizer again in Settings';
   if (!(statOrNull(directory)?.isDirectory() ?? false)) {
     throw refused(`${named(spec, setting)} is ${directory}, which is not a directory; ${fix}.`);
   }

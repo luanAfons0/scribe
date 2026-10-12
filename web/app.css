@@ -188,6 +188,8 @@ a.brand { color: inherit; text-decoration: none; }
 .event-meta { margin: 0; color: var(--muted); font-size: 13px; }
 .event-meta a { color: var(--accent); font-weight: 600; text-underline-offset: 3px; }
 .next-event { margin: -6px 0 18px; font-size: 13px; color: var(--muted); }
+#calendar-unread { color: var(--faint); }
+#calendar-unread a { color: var(--accent); font-weight: 600; text-underline-offset: 3px; }
 
 @media (max-width: 600px) {
   .event { grid-template-columns: auto 1fr; }
@@ -421,7 +423,10 @@ h3.section-label { margin-top: 24px; }
 .settings .acts { align-items: center; }
 .saved { color: var(--muted); }
 
-/* A key, as the Popup's foot and the Settings view name one. */
+/* Under the Jottings of the Call that records: the Popup's Shortcut. */
+.shortcut-hint { margin: 6px 0 0; font-size: 13px; color: var(--faint); }
+
+/* A key, as the Popup's foot, the Call and the Settings view name one. */
 kbd {
   padding: 1px 6px;
   border: 1px solid var(--line);

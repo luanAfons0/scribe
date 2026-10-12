@@ -31,11 +31,21 @@
       <div>
         <p class="event-name" id="upcoming-name"></p>
         <p class="event-meta"><span id="upcoming-span"></span>
-          <a id="upcoming-meet" href="#" target="_blank" rel="noopener noreferrer">Open the Meet</a></p>
+          <a id="upcoming-meet" href="#" target="_blank"
+            rel="noopener noreferrer">Open the Meet</a></p>
       </div>
-      <div class="acts"><button class="act go" id="upcoming-start" type="button">Start a Call</button></div>
+      <div class="acts">
+        <button class="act go" id="upcoming-start" type="button">Start a Call</button>
+      </div>
     </div>
     <p class="next-event" id="next-event" hidden></p>
+    <!-- A calendar that cannot be read, said once and quietly where the next
+         Event shows. Settings has the sentence of the fault; this line never
+         carries the address (ADR-0006). -->
+    <p class="next-event" id="calendar-unread" hidden>
+      scribe cannot read the calendar now, so an Event may be missing.
+      <a href="#settings">See why in Settings</a>
+    </p>
     <div class="mast">
       <h2 class="section-label">Calls</h2>
       <!-- The App asks what scribe may capture: any screen or window, whose
@@ -120,6 +130,12 @@
     <h3 class="section-label"><label for="call-jottings">Jottings</label></h3>
     <textarea class="jottings" id="call-jottings" spellcheck="true"
       placeholder="Type as the call goes. A line that starts with # is a heading."></textarea>
+    <!-- While the Call records: the Popup's Shortcut, with the keys the
+         Settings view's firstmate bind command line gives. -->
+    <p class="shortcut-hint" id="shortcut-hint" hidden>
+      Write from anywhere with <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>J</kbd>.
+      The Popup shows these Jottings.
+    </p>
 
     <h3 class="section-label">Transcript</h3>
     <p class="empty" id="transcribing" hidden>Whisper is still reading the audio…</p>
@@ -225,7 +241,8 @@
         </div>
         <div id="calendar-saved" hidden>
           <div class="secret">
-            <span class="secret-value" aria-label="Saved address, hidden">••••••••</span>
+            <span class="secret-value"
+              aria-label="Saved address, hidden">••••••••</span>
             <button class="act" type="button" id="calendar-replace">Replace</button>
             <button class="act danger" type="button" id="calendar-remove">Remove</button>
           </div>
@@ -246,12 +263,12 @@
       <!-- The one sentence a bad value is refused with. -->
       <p class="fault" id="settings-refused" role="alert" hidden></p>
     </form>
-    <!-- Speakers: sherpa-onnx's diarizer and its two models, drawn by
+    <!-- The diarizer: sherpa-onnx's program and its two models, drawn by
          downloads.js out of get_settings and get_downloads, and fetched only
          on a click (ADR-0007). There is nothing to save here: a fetch sets
          it, and SCRIBE_DIARIZER beats it. -->
     <div class="setting speakers-setting">
-      <span class="section-label">Speakers</span>
+      <span class="section-label">Diarizer</span>
       <p class="setting-help">
         Tells the people in the call’s sound apart after each Call stops. It
         runs on this machine, and scribe deletes the call’s sound once it is read.
@@ -260,7 +277,7 @@
         <div id="diarizer-offer">
           <p class="setting-help" id="diarizer-offer-text"></p>
           <div class="fetch-acts">
-            <button class="act" id="fetch-diarizer" type="button">Fetch Speakers</button>
+            <button class="act" id="fetch-diarizer" type="button">Fetch the diarizer</button>
             <progress class="fetch-progress" id="diarizer-progress" max="1" value="0"
               hidden></progress>
           </div>
@@ -297,6 +314,7 @@
 <script src="events.js"></script>
 <script src="settings.js"></script>
 <script src="shortcut.js"></script>
+<script src="time.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

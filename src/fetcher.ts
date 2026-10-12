@@ -223,13 +223,9 @@ export function fetcherFor(
         setting: 'whisper',
         make: async (part) => {
           await mkdir(part);
-          await unpackPart(name, build, build.format, into, part);
+          await unpackPart(name, build, into, part);
           const inside = build.program.split('/');
-          const program = join(part, ...inside);
-          if (!(await stat(program).catch(() => null))?.isFile()) {
-            throw new Error(`${name} from ${build.url} holds no ${build.program}.`);
-          }
-          await chmod(program, 0o755);
+          await programIn(name, build, join(part, ...inside), build.program);
           return join(kept, ...inside);
         },
       });
@@ -278,15 +274,12 @@ export function fetcherFor(
             member,
             posix.basename(member),
           ]);
-          await unpackPart(name, diarizerBuild, diarizerBuild.format, build, part, members);
-          await unpackPart(name, diarizer.segmentation, diarizer.segmentation.format,
-            segmentation, part, [[diarizer.segmentation.member, SEGMENTATION_MODEL]]);
+          await unpackPart(name, diarizerBuild, build, part, members);
+          await unpackPart(name, diarizer.segmentation, segmentation, part, [
+            [diarizer.segmentation.member, SEGMENTATION_MODEL],
+          ]);
           await rename(embedding, join(part, EMBEDDING_MODEL));
-          const program = join(part, DIARIZER_PROGRAM);
-          if (!(await stat(program).catch(() => null))?.isFile()) {
-            throw new Error(`${name} from ${diarizerBuild.url} holds no ${DIARIZER_PROGRAM}.`);
-          }
-          await chmod(program, 0o755);
+          await programIn(name, diarizerBuild, join(part, DIARIZER_PROGRAM), DIARIZER_PROGRAM);
           return kept;
         },
       });
@@ -300,19 +293,34 @@ export function fetcherFor(
  */
 async function unpackPart(
   name: string,
-  source: Download,
-  format: Format,
+  source: Download & { readonly format: Format },
   into: string,
   part: string,
   keep?: readonly (readonly [string, string])[],
 ): Promise<void> {
   try {
-    unpack(into, format, part, keep === undefined ? undefined : new Map(keep));
+    unpack(into, source.format, part, keep === undefined ? undefined : new Map(keep));
   } catch (fault) {
     throw new Error(`${name} from ${source.url} could not be unpacked: ${sentenceFor(fault)}`);
   } finally {
     await rm(into, { force: true });
   }
+}
+
+/**
+ * Make the program an unpacked build holds runnable, or say that the build
+ * holds no such file.
+ */
+async function programIn(
+  name: string,
+  source: Download,
+  program: string,
+  named: string,
+): Promise<void> {
+  if (!(await stat(program).catch(() => null))?.isFile()) {
+    throw new Error(`${name} from ${source.url} holds no ${named}.`);
+  }
+  await chmod(program, 0o755);
 }
 
 /** This system, as a person names it: the Page cannot tell, as a wsl Place runs Linux. */

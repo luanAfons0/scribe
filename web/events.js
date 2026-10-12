@@ -3,8 +3,9 @@
    From five minutes before an Event until it ends, a banner shows it, with
    Open the Meet and Start a Call. Further away, one line says the next Event.
    The Notice a minute before an Event opens #upcoming, which scrolls to the
-   banner. A calendar that cannot be read shows nothing here: the Settings
-   view says why, and never a Notice.
+   banner. A calendar that cannot be read is said once here, in one quiet
+   line with a link to the Settings view, which says why. That line never
+   carries the address, and no Notice says it (ADR-0006).
 
    app.js calls drawUpcoming() when it draws the list, and wires the banner's
    Start a Call to its own start(). */
@@ -43,6 +44,9 @@ async function drawUpcoming() {
   const line = document.getElementById('next-event');
   const startPlain = document.getElementById('start');
   const { events } = await call('list_events');
+  const calendar = (await call('get_settings')).settings.calendarUrl;
+  document.getElementById('calendar-unread').hidden =
+    !calendar.set || calendar.read === null || calendar.read.problem === null;
   const now = Date.now();
   // Of two Events at once, the one that starts last is the one a Call started
   // now is for, so the banner shows that one.

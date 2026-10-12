@@ -237,7 +237,10 @@ test(
 
     assert.match(
       seen.fetch?.failed ?? '',
-      /^sherpa-onnx 1\.13\.8 from http:\S+\/segmentation\.tar\.bz2 is not the file scribe expects: its SHA-256 does not match, so nothing was kept\.$/,
+      new RegExp(
+        '^sherpa-onnx 1\\.13\\.8 from http:\\S+/segmentation\\.tar\\.bz2 is not the file scribe ' +
+          'expects: its SHA-256 does not match, so nothing was kept\\.$',
+      ),
     );
     assert.deepEqual(await filesIn(plugin.directory), ['scribe.db']);
     assert.equal((await diarizerSetting(plugin)).value, null);

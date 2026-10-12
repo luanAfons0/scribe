@@ -1,5 +1,5 @@
 /* The offers to fetch whisper.cpp and a model, under their settings in the
-   Settings view, and Speakers after them, as get_downloads tells them
+   Settings view, and the diarizer after them, as get_downloads tells them
    (ADR-0005, ADR-0007).
 
    Nothing is fetched until the operator clicks: each fetch tool is called
@@ -8,8 +8,8 @@
    settings again, which now name what was fetched. A download that failed
    leaves its one sentence under its button. The offer to fetch whisper.cpp
    is shown only while whisper.cpp is not set, or is set and cannot be run;
-   the models are always offered, the one downloads.json names first. Speakers
-   are offered only while the diarizer is not set, or is set and not whole;
+   the models are always offered, the one downloads.json names first. The
+   diarizer is offered only while it is not set, or is set and not whole;
    once it is, the block says so.
 
    settings.js calls showDownloads(settings) when the Settings view opens. */
@@ -105,7 +105,7 @@ function drawDownloads(downloads) {
   downloadTimer = running ? setTimeout(followDownloads, DOWNLOAD_POLL_MS) : null;
 }
 
-/** Draw Speakers: the offer to fetch the diarizer, or that it is set, and its problem. */
+/** Draw the diarizer: the offer to fetch the diarizer, or that it is set, and its problem. */
 function drawDiarizer(diarizer) {
   const setting = diarizerSetting;
   const ready = setting !== null && setting.value !== null && setting.problem === null;
@@ -129,7 +129,7 @@ function drawDiarizer(diarizer) {
       (setting.from === 'environment'
         ? setting.variable + ' decides this where the Host is started: ' + setting.value + '.'
         : 'sherpa-onnx ' + diarizer.release + ' is set.') +
-      ' New Calls get Speakers.';
+      ' scribe does not run it yet: Calls get no Speakers until it does.';
     const ignored = document.getElementById('diarizer-ignored');
     ignored.hidden = setting.ignored === null;
     ignored.textContent = setting.ignored || '';
