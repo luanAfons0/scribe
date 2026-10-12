@@ -97,6 +97,8 @@ src/           the Plugin Server. Every file is one job.
   events.ts    which entries of the feed are Events, and when each happens.
   calendar.ts  the calendar's secret address, read now and every few
                minutes; the Events, held in memory; the last read's result.
+  notices.ts   a Notice through the Host a minute before each Event, once,
+               one every 5 s (FirstMate ADR-0014).
   bus.ts       the Tool Bus, from this end of the pipe: ask the Host to call
                another Plugin's tool, and read its answer by id.
   tools.ts     the tools this Plugin ships, for the Page.
@@ -109,6 +111,8 @@ web/           the Plugin Page, as the Host serves it.
                what is missing.
   calendar.js  the calendar's secret address in Settings: masked once saved,
                and what its last read gave.
+  events.js    the Calls list's Event: a banner from five minutes before it
+               until it ends, or the next one in one line.
   downloads.js the offers to fetch whisper.cpp and a model, and how far each
                download got.
   jottings.js  keepJottings(): the box that keeps every change at once, and

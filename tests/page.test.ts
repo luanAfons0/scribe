@@ -22,6 +22,7 @@ const PAGES = [
   { page: 'index.html', script: 'settings.js' },
   { page: 'index.html', script: 'downloads.js' },
   { page: 'index.html', script: 'calendar.js' },
+  { page: 'index.html', script: 'events.js' },
   { page: 'index.html', script: 'shortcut.js' },
   { page: 'jot.html', script: 'jot.js' },
 ];
@@ -360,4 +361,41 @@ test('Settings shows the firstmate bind command line for the Popup, with a copy 
   assert.match(html, /<code id="bind-command">firstmate bind Ctrl\+Shift\+J scribe jot\.html<\/code>/);
   assert.match(html, /<button[^>]*id="copy-bind"[^>]*type="button"/);
   assert.match(code, /navigator\.clipboard\.writeText/);
+});
+
+test('the Calls list shows the Event that starts within five minutes as a banner', async () => {
+  const html = await readFile(join(WEB, 'index.html'), 'utf8');
+  const code = await readFile(join(WEB, 'events.js'), 'utf8');
+  const app = await readFile(join(WEB, 'app.js'), 'utf8');
+
+  // A Notice opens #upcoming, so the banner carries that id.
+  const banner = /<div class="event" id="upcoming"[^>]*>([\s\S]*?)<\/div>\s*<p class="next-event"/.exec(html);
+  assert.ok(banner, 'index.html has no banner with the id a Notice opens');
+  assert.match(banner[1] ?? '', /<a id="upcoming-meet"[^>]*target="_blank"[^>]*>Open the Meet<\/a>/);
+  assert.match(banner[1] ?? '', /<button class="act go" id="upcoming-start" type="button">Start a Call<\/button>/);
+  assert.ok(html.indexOf('id="upcoming"') < html.indexOf('id="start"'), 'the banner is under the list');
+  assert.match(code, /call\('list_events'\)/);
+  assert.match(code, /const SOON_MS = 5 \* 60_000;/);
+  assert.match(code, /Date\.parse\(event\.end\) > now/);
+  assert.match(code, /scrollIntoView/);
+  assert.match(app, /byId\('upcoming-start'\)\.addEventListener\('click', start\)/);
+});
+
+test('further away, the Calls list says the next Event in one line', async () => {
+  const html = await readFile(join(WEB, 'index.html'), 'utf8');
+  const code = await readFile(join(WEB, 'events.js'), 'utf8');
+
+  assert.match(html, /<p class="next-event" id="next-event" hidden>/);
+  assert.match(code, /'Next Event: '/);
+  assert.match(code, /', on Google Meet\.'/);
+});
+
+test('the banner is the accent blue, light and dark, and never red', async () => {
+  const css = await readFile(join(WEB, 'app.css'), 'utf8');
+
+  assert.equal(css.match(/--accent-soft: /g)?.length, 2, 'the soft accent is not set for both');
+  const rule = /\.event \{[^}]*\}/.exec(css)?.[0] ?? '';
+  assert.match(rule, /border: 1px solid var\(--accent\)/);
+  assert.match(rule, /background: var\(--accent-soft\)/);
+  assert.ok(!/--live/.test(rule), 'the banner uses the red of recording');
 });

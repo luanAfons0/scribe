@@ -136,6 +136,7 @@ These are set in the environment alone:
 | `SCRIBE_WORKLOG_WAIT_MS` | How long scribe waits for Worklog to answer. Default 30000. |
 | `SCRIBE_FETCH_IDLE_MS`   | How long a download may send nothing before it is given up. Default 60000. |
 | `SCRIBE_CALENDAR_READ_MS` | How often scribe reads the calendar again. Default 300000 (5 minutes). |
+| `SCRIBE_NOTICE_LEAD_MS`  | How long before an Event its Notice goes. Default 60000. |
 | `SCRIBE_DOWNLOADS`       | A list of downloads read in place of `src/downloads.json`. Tests point it at a server of their own; an operator has no reason to set it. |
 | `SCRIBE_NODE`            | The Node 24 that `mcp` runs in a `wsl` Place, when `PATH` has none. |
 
@@ -165,6 +166,17 @@ with a Google Meet link, in its conference data or else in its description
 or location. scribe skips an entry that is all day, cancelled, or that you
 declined. The `list_events` tool gives the Events from now to the next day:
 the name, the start, the end and the Meet link of each, and nothing else.
+
+A minute before each Event, scribe sends a Notice through FirstMate: the
+Event's name and "in 1 min" as the title, its time and "on Google Meet" as the
+body. Each Event gets one Notice, once. FirstMate takes one Notice from a
+Plugin every 5 s, so two Events at the same time give two Notices, 5 s apart.
+A click on the Notice opens scribe at the Event.
+
+On the Calls list, a banner shows the Event from five minutes before it
+until it ends, with **Open the Meet** and **Start a Call**. Further away, one
+line says the next Event. A calendar that cannot be read sends no Notice:
+Settings says why.
 
 A Google Workspace admin can turn the secret address off. Then Settings says
 the address answered 404, there are no Events, and scribe records as before.
