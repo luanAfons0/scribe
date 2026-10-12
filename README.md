@@ -265,7 +265,11 @@ Then set **Worklog Plugin** to `worklog` in Settings. With none set, the
 button is disabled, and the page says where to set it.
 
 The page then says when the Topics were sent, and the list of Calls marks a
-sent Call. **Send again** changes the same Entry rather than adding one. When
+sent Call. Making the Minutes again sends nothing. When it writes other
+Topics, the page says "The Topics changed since you sent them", and
+**Send again** changes the same Entry rather than adding one. When Worklog
+says that Entry is gone, because you deleted it there, scribe makes a new one
+and keeps it. When
 the Entry cannot be sent — no Grant, Worklog Stopped, or no answer — the Call
 stays unsent, and the page says why. A Call with no Topics, because it still
 records or its Minutes are not made, has no button.
