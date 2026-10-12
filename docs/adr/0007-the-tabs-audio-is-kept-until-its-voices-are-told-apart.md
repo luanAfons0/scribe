@@ -2,17 +2,18 @@
 status: proposed
 ---
 
-# The tab's audio is kept until its voices are told apart
+# The call's sound is kept until its voices are told apart
 
 scribe told people apart by track alone: `Você` for the mic, `Outros` for
-the tab. To tell the people in the tab apart, a diarizer (sherpa-onnx) must
-read the whole Call at once: run on one window at a time, the "Pessoa 1" of
-one window is not the "Pessoa 1" of the next.
+the call's sound (the track the code names `tab`, ADR-0008). To tell the
+people in the call's sound apart, a diarizer (sherpa-onnx) must read the
+whole Call at once: run on one window at a time, the "Pessoa 1" of one window
+is not the "Pessoa 1" of the next.
 
-So the tab's audio of a Call is kept in `audio/` until the Call stops and the
-diarizer has read it, and is then deleted. **This reverses the rule that a
-chunk is deleted as soon as Whisper has read it**, for the tab's track. The
-mic's track is never diarized, and is still deleted at once.
+So the call's sound is kept in `audio/` until the Call stops and
+the diarizer has read it, and is then deleted. **This reverses the rule that
+a chunk is deleted as soon as Whisper has read it**, for the call's sound.
+The mic's track is never diarized, and is still deleted at once.
 
 ## Considered Options
 
@@ -26,11 +27,14 @@ mic's track is never diarized, and is still deleted at once.
 
 The audio still never leaves the machine, and is never kept past the Call.
 Without the diarizer set, nothing changes: each chunk is deleted once Whisper
-has read it, and the tab's lines stay `Outros`.
+has read it, and the lines of the call's sound stay `Outros`.
 
-A Call that is Cut leaves its tab's audio behind. The next start deletes it
+A Call that is Cut leaves its sound behind. The next start deletes it
 without telling its voices apart, as it makes no Minutes on its own: the
-Call's tab lines stay `Outros`.
+lines of that Call's sound stay `Outros`.
+
+On Windows the call's sound is the whole machine's sound (ADR-0008), so any
+other sound the machine plays is kept with it until the diarizer has read it.
 
 Voices are named per Call. scribe keeps no voiceprint between Calls: it would
 be biometric data of people who never agreed to it.
