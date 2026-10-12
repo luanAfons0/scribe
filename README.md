@@ -91,6 +91,7 @@ shell or a systemd service.
 | whisper.cpp model      | The absolute path of the model file, `ggml-small.bin`. Needed to record. |
 | Minutes command        | The command that makes the Minutes, as a JSON array: the program, then its arguments. Optional; see below. |
 | Worklog Plugin         | The Registry name of the Worklog Plugin that Send to Worklog sends to. Optional; see below. |
+| Calendar               | Your Google Calendar's secret iCal address, for its Events. Optional; see "Events" below. |
 
 scribe keeps them in `settings.json`, in its own Plugin directory, beside
 `scribe.db`. A field left empty is none. A value that is not in its form, such
@@ -124,6 +125,7 @@ Host's systemd drop-in, and set the Minutes command on the Page instead.
 | `SCRIBE_WHISPER_MODEL`   | The whisper.cpp model.                                  |
 | `SCRIBE_MINUTES_COMMAND` | The Minutes command, as a JSON array.                   |
 | `SCRIBE_WORKLOG_PLUGIN`  | The Worklog Plugin.                                     |
+| `SCRIBE_CALENDAR_URL`    | The calendar's secret iCal address. scribe never prints it. |
 
 These are set in the environment alone:
 
@@ -133,11 +135,40 @@ These are set in the environment alone:
 | `SCRIBE_CUT_AFTER_MS`    | How long a Call may go without audio before it is Cut. Default 60000. |
 | `SCRIBE_WORKLOG_WAIT_MS` | How long scribe waits for Worklog to answer. Default 30000. |
 | `SCRIBE_FETCH_IDLE_MS`   | How long a download may send nothing before it is given up. Default 60000. |
+| `SCRIBE_CALENDAR_READ_MS` | How often scribe reads the calendar again. Default 300000 (5 minutes). |
 | `SCRIBE_DOWNLOADS`       | A list of downloads read in place of `src/downloads.json`. Tests point it at a server of their own; an operator has no reason to set it. |
 | `SCRIBE_NODE`            | The Node 24 that `mcp` runs in a `wsl` Place, when `PATH` has none. |
 
 One of the times that is not a whole number stops the Plugin Server at start
 with one sentence that names it, and the Index Page shows the Plugin Stopped.
+
+### Events
+
+scribe can read your Google Calendar, to know when a call comes. It reads
+the calendar's secret address in iCal format, and nothing else: no OAuth and
+no Google Cloud project (ADR-0006).
+
+1. Open Google Calendar on the web, and open **Settings** (the gear).
+2. Under **Settings for my calendars**, choose your calendar.
+3. Under **Integrate calendar**, copy **Secret address in iCal format**.
+4. Paste it in scribe's Settings, under **Calendar**, and press **Save**.
+
+The address is a secret: whoever holds it reads your whole calendar. Once
+saved, scribe shows it masked and never again. It is in no log line, no
+error and no tool result. **Replace** takes a new one, and **Remove** clears
+it, which turns Events off. Under it, Settings says when the calendar was
+last read and how many Events it holds, or why the read failed.
+
+scribe reads the address at start, every five minutes, and when you save it.
+It holds the Events in memory, never in `scribe.db`. An Event is an entry
+with a Google Meet link, in its conference data or else in its description
+or location. scribe skips an entry that is all day, cancelled, or that you
+declined. The `list_events` tool gives the Events from now to the next day:
+the name, the start, the end and the Meet link of each, and nothing else.
+
+A Google Workspace admin can turn the secret address off. Then Settings says
+the address answered 404, there are no Events, and scribe records as before.
+A calendar that cannot be read never stops a Call.
 
 ## Record a Call
 

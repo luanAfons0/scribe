@@ -92,6 +92,11 @@ src/           the Plugin Server. Every file is one job.
   worklog-entry.ts the Call's Entry in Worklog, sent only by send_to_worklog,
                when the operator presses Send to Worklog: its title, its
                Topics, and why it was not sent, when it was not.
+  ical.ts      the iCal text, read by scribe's own reader: unfolded lines,
+               properties, and times through Intl (ADR-0006).
+  events.ts    which entries of the feed are Events, and when each happens.
+  calendar.ts  the calendar's secret address, read now and every few
+               minutes; the Events, held in memory; the last read's result.
   bus.ts       the Tool Bus, from this end of the pipe: ask the Host to call
                another Plugin's tool, and read its answer by id.
   tools.ts     the tools this Plugin ships, for the Page.
@@ -100,8 +105,10 @@ web/           the Plugin Page, as the Host serves it.
   index.html   the Plugin Page, drawn by app.js.
   rpc.js       call(): one tool call over POST rpc.
   app.js       the list of Calls, one Call, and Start and Stop.
-  settings.js  the Settings view: the four settings, who decides each, and
+  settings.js  the Settings view: the settings, who decides each, and
                what is missing.
+  calendar.js  the calendar's secret address in Settings: masked once saved,
+               and what its last read gave.
   downloads.js the offers to fetch whisper.cpp and a model, and how far each
                download got.
   jottings.js  keepJottings(): the box that keeps every change at once.

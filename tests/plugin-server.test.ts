@@ -23,6 +23,7 @@ const TOOLS = [
   'get_downloads',
   'get_settings',
   'list_calls',
+  'list_events',
   'make_minutes',
   'rename_call',
   'save_jottings',

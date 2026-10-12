@@ -20,6 +20,7 @@ import {
   saveMinutes,
   viewOf,
 } from './calls.ts';
+import type { Calendar } from './calendar.ts';
 import type { Fetcher } from './fetcher.ts';
 import { badInput } from './mcp.ts';
 import type { Tool, ToolResult } from './mcp.ts';
@@ -41,13 +42,23 @@ export type Parts = {
   readonly sender: EntrySender;
   readonly choices: Choices;
   readonly fetcher: Fetcher;
+  readonly calendar: Calendar;
 };
+
+/** list_events answers the Events from now until this much later: the next day. */
+const EVENTS_AHEAD_MS = 24 * 60 * 60_000;
 
 /** The tools, over the parts of one running Plugin Server. */
 export function toolsFor(parts: Parts): readonly Tool[] {
-  const { store, recorder, transcriber, maker, sender, choices, fetcher } = parts;
+  const { store, recorder, transcriber, maker, sender, choices, fetcher, calendar } = parts;
   const view = (id: number) =>
     viewOf(store, id, transcriber.busyWith(id), sender.sending(id));
+  // The calendar's address is never in it: only whether it is set, and what
+  // its last read gave (ADR-0006).
+  const settingsView = () => {
+    const settings = choices.view();
+    return { ...settings, calendarUrl: { ...settings.calendarUrl, read: calendar.lastRead() } };
+  };
 
   return [
     {
@@ -249,9 +260,13 @@ export function toolsFor(parts: Parts): readonly Tool[] {
         'settings file holds it, "default" for none; saved, what the settings file holds; ' +
         'variable, the one that beats the file; problem, the one sentence that says what ' +
         'is missing or wrong, or null; and ignored, the one sentence that says its variable ' +
-        'is set, not in its form, and ignored, or null.',
+        'is set, not in its form, and ignored, or null. calendarUrl, the calendar\'s secret ' +
+        'iCal address, is never shown: it has set and saved as true or false in place of ' +
+        'value and saved, and read, what the last read gave: { at, count, problem }, where ' +
+        'count is how many Events the calendar holds and problem the sentence of a read ' +
+        'that failed, or null before the first read.',
       inputSchema: { type: 'object', properties: {}, required: [] },
-      call: () => told({ settings: choices.view() }),
+      call: () => told({ settings: settingsView() }),
     },
 
     {
@@ -283,12 +298,40 @@ export function toolsFor(parts: Parts): readonly Tool[] {
             type: ['string', 'null'],
             description: "The Registry name of the Worklog Plugin a Call's Entry goes to.",
           },
+          calendarUrl: {
+            type: ['string', 'null'],
+            description:
+              'The calendar\'s "Secret address in iCal format", from Google Calendar\'s ' +
+              'settings. scribe reads it now and every few minutes, and never shows it again.',
+          },
         },
         required: [],
       },
       call: (given) => {
         choices.update(given);
-        return told({ settings: choices.view() });
+        if ('calendarUrl' in given) calendar.reread();
+        return told({ settings: settingsView() });
+      },
+    },
+
+    {
+      name: 'list_events',
+      description:
+        'The Events from now until the next day, by start: each Event of the calendar that ' +
+        'has a Google Meet link, is not all day, not cancelled and not declined, and has not ' +
+        'ended. Each has name, start and end (ISO 8601 instants) and meet, its Google Meet ' +
+        'link. With no calendar address, or before its first read, there are none.',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+      call: () => {
+        const now = Date.now();
+        return told({
+          events: calendar.between(now, now + EVENTS_AHEAD_MS).map((event) => ({
+            name: event.name,
+            start: new Date(event.start).toISOString(),
+            end: new Date(event.end).toISOString(),
+            meet: event.meet,
+          })),
+        });
       },
     },
 

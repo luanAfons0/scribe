@@ -21,6 +21,7 @@ const PAGES = [
   { page: 'index.html', script: 'app.js' },
   { page: 'index.html', script: 'settings.js' },
   { page: 'index.html', script: 'downloads.js' },
+  { page: 'index.html', script: 'calendar.js' },
 ];
 
 /** Every `href` and `src` the page names, in the order it names them. */
@@ -236,4 +237,34 @@ test('app.js marks a sent Call in the list, and disables Send with no Worklog Pl
 
   assert.match(code, /found\.sentToWorklogAt !== null[\s\S]*?'Sent to Worklog'/);
   assert.match(code, /worklogPluginSet\(\)[\s\S]*?No Worklog Plugin is set[\s\S]*?disabled = true/);
+});
+
+test(
+  "the Settings view takes the calendar's secret address, and shows it masked once saved",
+  async () => {
+    const html = await readFile(join(WEB, 'index.html'), 'utf8');
+    const paths = pathsIn(html);
+
+    for (const id of [
+      'set-calendarUrl', 'calendar-empty', 'calendar-saved', 'calendarUrl-from',
+      'calendarUrl-ignored', 'calendar-read', 'calendar-problem',
+    ]) {
+      assert.ok(html.includes(`id="${id}"`), `index.html has no #${id}`);
+    }
+    for (const id of ['calendar-replace', 'calendar-remove']) {
+      // A button in the settings form submits it unless it says otherwise.
+      assert.match(html, new RegExp(`<button[^>]*type="button"[^>]*id="${id}"`));
+    }
+    assert.ok(paths.indexOf('calendar.js') < paths.indexOf('settings.js'), 'calendar.js loads late');
+  },
+);
+
+test('calendar.js never puts the address back on the Page', async () => {
+  const code = await readFile(join(WEB, 'calendar.js'), 'utf8');
+
+  // get_settings has no address to give; the field is emptied once it is sent.
+  assert.ok(!code.includes('calendarUrl.value'), 'calendar.js reads an address from the settings');
+  assert.match(code, /field\.value = '';/);
+  assert.match(code, /call\('update_settings', \{ calendarUrl: null \}\)/);
+  assert.match(code, /call\('list_events'\)/);
 });

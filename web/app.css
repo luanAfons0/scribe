@@ -381,6 +381,18 @@ h3.section-label { margin-top: 24px; }
 .fetch { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 .fetch .setting-help { margin-top: 0; }
 .fetch-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+/* The calendar's saved address, masked: it is never shown back (ADR-0006). */
+.secret { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.secret-value {
+  flex: 1;
+  min-width: 12em;
+  padding: 6px 10px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font: 14px/1.4 var(--mono);
+  letter-spacing: 0.1em;
+}
 .fetch-choice { display: inline-block; width: auto; }
 .fetch-progress { flex: 1 1 160px; height: 8px; accent-color: var(--accent); }
 
