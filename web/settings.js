@@ -74,6 +74,12 @@ async function recordingProblem() {
   return settings.whisper.problem || settings.whisperModel.problem || null;
 }
 
+/** Whether a Worklog Plugin is set, so the Topics have somewhere to go. */
+async function worklogPluginSet() {
+  const settings = (await call('get_settings')).settings;
+  return settings.worklogPlugin.value !== null;
+}
+
 document.getElementById('settings-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const saved = document.getElementById('settings-saved');

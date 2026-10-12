@@ -76,8 +76,6 @@
       </div>
     </div>
     <p class="empty" id="minutes-state" hidden></p>
-    <!-- Why the Call's Entry did not reach Worklog, when it did not. -->
-    <p class="empty fault" id="entry-state" hidden></p>
     <!-- The Minutes as Markdown, drawn by markdown.js: escaped first, always. -->
     <article class="minutes" id="minutes" hidden></article>
     <!-- Edit: the Minutes' Markdown, by hand. The Transcript has no editor. -->
@@ -88,6 +86,22 @@
         <button class="act" id="minutes-cancel" type="button">Cancel</button>
       </div>
     </form>
+
+    <!-- The Topics the Minutes command wrote, read-only, and the one way they
+         reach Worklog: nothing goes until Send to Worklog is pressed. Shown
+         once a Call has Topics. -->
+    <div id="topics-part" hidden>
+      <div class="mast topics-mast">
+        <h3 class="section-label">Topics for Worklog</h3>
+      </div>
+      <div class="worklog">
+        <p class="topics" id="topics"></p>
+        <div class="worklog-foot">
+          <p class="worklog-state" id="worklog-state"></p>
+          <button class="act go" id="send-worklog" type="button">Send to Worklog</button>
+        </div>
+      </div>
+    </div>
 
     <h3 class="section-label"><label for="call-jottings">Jottings</label></h3>
     <textarea class="jottings" id="call-jottings" spellcheck="true"
@@ -174,7 +188,8 @@
         <input class="field" id="set-worklogPlugin" type="text" spellcheck="false"
           placeholder="worklog">
         <p class="setting-help">
-          The Registry name of the Plugin a Call’s Entry goes to. Empty sends none.
+          The Registry name of the Plugin that Send to Worklog sends the Topics to.
+          Empty turns Send to Worklog off.
         </p>
         <p class="setting-from" id="worklogPlugin-from" hidden></p>
         <p class="fault setting-problem" id="worklogPlugin-ignored" hidden></p>

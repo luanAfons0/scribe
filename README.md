@@ -90,7 +90,7 @@ shell or a systemd service.
 | whisper.cpp executable | The absolute path of `whisper-cli` (`whisper-cli.exe` on Windows). Needed to record. |
 | whisper.cpp model      | The absolute path of the model file, `ggml-small.bin`. Needed to record. |
 | Minutes command        | The command that makes the Minutes, as a JSON array: the program, then its arguments. Optional; see below. |
-| Worklog Plugin         | The Registry name of the Worklog Plugin a Call's Entry goes to. Optional; see below. |
+| Worklog Plugin         | The Registry name of the Worklog Plugin that Send to Worklog sends to. Optional; see below. |
 
 scribe keeps them in `settings.json`, in its own Plugin directory, beside
 `scribe.db`. A field left empty is none. A value that is not in its form, such
@@ -238,10 +238,15 @@ same way.
 
 ### An Entry in Worklog
 
-When the command makes a Call's Minutes, scribe can send its Topics to
+scribe can send a Call's Topics to
 [Worklog](https://github.com/luanAfons0/worklog) as one `Done` Entry in the
-current Cycle, over the FirstMate Tool Bus. The Entry is titled with the
-Call's times, in this machine's time zone, and its title:
+current Cycle, over the FirstMate Tool Bus. Nothing goes on its own: making
+the Minutes sends nothing. The Call's page shows the Topics, read-only, under
+the Minutes, and they go to Worklog only when you press **Send to Worklog**.
+A test Call, or one you do not want logged, stays out of Worklog.
+
+The Entry is titled with the Call's times, in this machine's time zone, and
+its title:
 
 ```
 Reunião 14:00 - 15:10: Prazo da entrega
@@ -256,13 +261,17 @@ Turn it on in two steps. Give scribe a Grant to call Worklog:
 firstmate grant scribe worklog
 ```
 
-Then set **Worklog Plugin** to `worklog` in Settings.
+Then set **Worklog Plugin** to `worklog` in Settings. With none set, the
+button is disabled, and the page says where to set it.
 
-**Make Minutes again** changes the same Entry rather than adding one. Minutes
-edited by hand send nothing. When the Entry cannot be sent — no Grant,
-Worklog Stopped, no answer, or Minutes with no Topics — the Minutes stay as
-they are, and the Call's page says why. With no Worklog Plugin set, scribe
-sends nothing and says nothing.
+The page then says when the Topics were sent, and the list of Calls marks a
+sent Call. **Send again** changes the same Entry rather than adding one. When
+the Entry cannot be sent — no Grant, Worklog Stopped, or no answer — the Call
+stays unsent, and the page says why. A Call with no Topics, because it still
+records or its Minutes are not made, has no button.
+
+Another Plugin with a Grant to scribe sends the same way, with the
+`send_to_worklog` tool.
 
 ### Find a Call again
 

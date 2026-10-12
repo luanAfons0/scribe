@@ -48,18 +48,12 @@ let maker: MinutesMaker | null = null;
 const heard = (id: number): void => maker?.heard(id);
 const transcriber = transcriberFor(store, choices, heard);
 const sender = entrySenderFor(store, settings, choices);
-maker = minutesMakerFor(
-  store,
-  settings,
-  choices,
-  (id) => transcriber.busyWith(id),
-  (id) => sender.made(id),
-);
+maker = minutesMakerFor(store, settings, choices, (id) => transcriber.busyWith(id));
 const recorder = recorderFor(store, transcriber, settings, choices, heard);
 
 const fetcher = fetcherFor(downloads, choices, settings);
 
-serve(toolsFor({ store, recorder, transcriber, maker, choices, fetcher }), receive);
+serve(toolsFor({ store, recorder, transcriber, maker, sender, choices, fetcher }), receive);
 
 // No whisper.cpp and no Minutes command outlives the Plugin Server (ADR-0003).
 // The Host closes stdin to stop it, and nobody is left to answer then, so it

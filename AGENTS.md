@@ -89,8 +89,9 @@ src/           the Plugin Server. Every file is one job.
                Transcript lines it heard.
   minutes.ts   the prompt, the Minutes command, and the title it proposes.
   minutes-maker.ts when the Minutes are made: after Stop, and on request.
-  worklog-entry.ts the Call's Entry in Worklog: its title, its Topics, and
-               why it was not sent, when it was not.
+  worklog-entry.ts the Call's Entry in Worklog, sent only by send_to_worklog,
+               when the operator presses Send to Worklog: its title, its
+               Topics, and why it was not sent, when it was not.
   bus.ts       the Tool Bus, from this end of the pipe: ask the Host to call
                another Plugin's tool, and read its answer by id.
   tools.ts     the tools this Plugin ships, for the Page.
@@ -197,7 +198,8 @@ not the project's. Git ignores all four.
 - Keep audio longer than it takes Whisper to read it.
 - Send the audio, the Jottings or the Transcript anywhere but the Minutes
   command the operator set. scribe knows no model and holds no key (ADR-0002).
-  Worklog gets a Call's title, its times and its Topics, and nothing else.
+  Worklog gets a Call's title, its times and its Topics, and nothing else,
+  and only on Send to Worklog.
 - Edit a Transcript. It is the record of the Call.
 - Record in the FirstMate window or the Popup (ADR-0001).
 - Tell the other people on the call anything, or join or post to a call.

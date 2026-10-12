@@ -28,6 +28,7 @@ import type { Recorder } from './recorder.ts';
 import type { Choices } from './settings.ts';
 import { within, type Store } from './store.ts';
 import type { Transcriber } from './transcriber.ts';
+import type { EntrySender } from './worklog-entry.ts';
 
 const ID = { type: 'integer', description: 'The id of the Call, from list_calls.' };
 
@@ -37,14 +38,16 @@ export type Parts = {
   readonly recorder: Recorder;
   readonly transcriber: Transcriber;
   readonly maker: MinutesMaker;
+  readonly sender: EntrySender;
   readonly choices: Choices;
   readonly fetcher: Fetcher;
 };
 
 /** The tools, over the parts of one running Plugin Server. */
 export function toolsFor(parts: Parts): readonly Tool[] {
-  const { store, recorder, transcriber, maker, choices, fetcher } = parts;
-  const view = (id: number) => viewOf(store, id, transcriber.busyWith(id));
+  const { store, recorder, transcriber, maker, sender, choices, fetcher } = parts;
+  const view = (id: number) =>
+    viewOf(store, id, transcriber.busyWith(id), sender.sending(id));
 
   return [
     {
@@ -151,7 +154,37 @@ export function toolsFor(parts: Parts): readonly Tool[] {
         'Minutes command in get_settings. It starts the work and answers the Call at once; ' +
         'get_call shows minutesState "made", or "failed" with minutesError.',
       inputSchema: { type: 'object', properties: { id: ID }, required: ['id'] },
-      call: (given) => told({ call: maker.make(checkCallId('make_minutes', given['id'])) }),
+      call: (given) => {
+        const id = checkCallId('make_minutes', given['id']);
+        // Minutes made while the Topics are on their way would count as sent,
+        // though Worklog got the old ones.
+        if (sender.sending(id)) {
+          throw badInput(
+            `The Topics of Call ${id} are being sent to Worklog. ` +
+              'Make its Minutes when that is done.',
+          );
+        }
+        maker.make(id);
+        return told({ call: view(id) });
+      },
+    },
+
+    {
+      name: 'send_to_worklog',
+      description:
+        'Send the Topics of an ended or Cut Call to the Worklog Plugin in get_settings, as ' +
+        'one Done Entry with the Call\'s title and times; a Call sent before changes the ' +
+        'same Entry. Nothing else leaves scribe, and nothing goes to Worklog until this is ' +
+        'called. It starts the send and answers the Call at once; get_call shows ' +
+        'sentToWorklogAt, or entryError with the sentence Worklog or the Host said. It is ' +
+        'refused while the Call records, while it has no Topics, with no Worklog Plugin ' +
+        'set, and while its Topics are being sent.',
+      inputSchema: { type: 'object', properties: { id: ID }, required: ['id'] },
+      call: (given) => {
+        const id = checkCallId('send_to_worklog', given['id']);
+        sender.send(id);
+        return told({ call: view(id) });
+      },
     },
 
     {

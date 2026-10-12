@@ -96,6 +96,39 @@ test('a file from before the Topics keeps its Minutes, and gets Topics when made
   assert.equal(plugin.output(), '');
 });
 
+test('a Call whose Topics went to Worklog on their own shows as sent, and one that did not, as unsent', async (t) => {
+  const directory = await makeDirectory(t);
+  const old = new DatabaseSync(join(directory, 'scribe.db'));
+  old.exec(VERSION_1);
+  old.exec('ALTER TABLE calls ADD COLUMN title_given INTEGER NOT NULL DEFAULT 0');
+  old.exec('ALTER TABLE calls ADD COLUMN topics TEXT');
+  old.exec('ALTER TABLE calls ADD COLUMN entry_id INTEGER');
+  old.exec('ALTER TABLE calls ADD COLUMN entry_error TEXT');
+  old.exec(
+    "UPDATE calls SET minutes = '## Velhas', minutes_state = 'made', topics = '- Prazo', " +
+      "entry_id = 7, entry_error = 'Make the Minutes again to send it.' WHERE id = 1",
+  );
+  old.exec(
+    "INSERT INTO calls (state, started_at, ended_at, minutes, minutes_state, topics) VALUES " +
+      "('ended', '2026-10-03T10:00:00.000Z', '2026-10-03T10:30:00.000Z', '## Outras', " +
+      "'made', '- Outro')",
+  );
+  old.exec('PRAGMA user_version = 4');
+  old.close();
+  const plugin = await startedAndShaken(t, { directory });
+
+  const sent = await getCall(plugin, 1);
+  const unsent = await getCall(plugin, 2);
+
+  assert.equal(sent.sentToWorklogAt, '2026-10-02T15:16:00.000Z');
+  assert.equal(sent.entryId, 7);
+  assert.equal(sent.topics, '- Prazo');
+  assert.equal(sent.entryError, null, 'a sentence of the old send stayed');
+  assert.equal(unsent.sentToWorklogAt, null);
+  assert.equal(unsent.minutes, '## Outras');
+  assert.equal(plugin.output(), '');
+});
+
 test('a file at a schema newer than this scribe knows is refused with a sentence', async (t) => {
   const directory = await makeDirectory(t);
   const newer = new DatabaseSync(join(directory, 'scribe.db'));

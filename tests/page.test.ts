@@ -8,7 +8,7 @@
  * element the script reaches for that the markup does not declare.
  */
 import { strict as assert } from 'node:assert';
-import { readFile, stat } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -196,4 +196,44 @@ test('downloads.js loads before app.js, which shows the Settings view', async ()
 
   assert.ok(paths.includes('downloads.js'), 'index.html does not load downloads.js');
   assert.ok(paths.indexOf('downloads.js') < paths.indexOf('app.js'), 'downloads.js loads too late');
+});
+
+test('no script of the Page loads from the web or names an absolute path', async () => {
+  const scripts = (await readdir(WEB)).filter((name) => name.endsWith('.js'));
+  assert.ok(scripts.includes('app.js'), 'no script was read');
+  for (const script of scripts) {
+    const code = await readFile(join(WEB, script), 'utf8');
+
+    assert.ok(!/https?:\/\//.test(code), `${script} names an address on the web`);
+    // A string that is a path from the root, such as '/p/scribe/rpc'.
+    assert.ok(!/(['"])\/[\w.-]+(\/[\w.-]*)*\1/.test(code), `${script} names an absolute path`);
+  }
+});
+
+test('the Call shows its Topics read-only, above Send to Worklog', async () => {
+  const html = await readFile(join(WEB, 'index.html'), 'utf8');
+
+  const topics = html.indexOf('id="topics"');
+  const button = html.indexOf('id="send-worklog"');
+  assert.ok(topics > 0 && button > topics, 'the Topics are not above Send to Worklog');
+  assert.match(html, /<p class="topics" id="topics"><\/p>/, 'the Topics are not read-only text');
+  assert.match(html, /<button[^>]*id="send-worklog"[^>]*type="button"/);
+});
+
+test('app.js sends to Worklog only from a click of Send to Worklog', async () => {
+  const code = await readFile(join(WEB, 'app.js'), 'utf8');
+
+  // Nothing goes to Worklog without the operator asking: the tool is called
+  // once, in the function the button's click runs.
+  assert.equal(code.split("call('send_to_worklog'").length, 2, 'send_to_worklog is called twice');
+  assert.match(code, /async function sendToWorklog\(\) \{[\s\S]*?call\('send_to_worklog'/);
+  assert.match(code, /sendButton\.addEventListener\('click', sendToWorklog\)/);
+  assert.ok(code.includes("byId('send-worklog')"), 'app.js does not reach for the button');
+});
+
+test('app.js marks a sent Call in the list, and disables Send with no Worklog Plugin set', async () => {
+  const code = await readFile(join(WEB, 'app.js'), 'utf8');
+
+  assert.match(code, /found\.sentToWorklogAt !== null[\s\S]*?'Sent to Worklog'/);
+  assert.match(code, /worklogPluginSet\(\)[\s\S]*?No Worklog Plugin is set[\s\S]*?disabled = true/);
 });

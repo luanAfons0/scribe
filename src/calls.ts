@@ -28,6 +28,8 @@ export type CallSummary = {
   readonly state: CallState;
   readonly startedAt: string;
   readonly endedAt: string | null;
+  /** When the Topics last went to Worklog, or null while they never did. */
+  readonly sentToWorklogAt: string | null;
 };
 
 /** One line of a Transcript, timed from the start of its Call. */
@@ -54,6 +56,8 @@ export type CallView = CallSummary & {
   readonly entryId: number | null;
   /** Why the last Entry could not be sent to Worklog, when it could not. */
   readonly entryError: string | null;
+  /** Whether the Topics are on their way to Worklog now. */
+  readonly sendingToWorklog: boolean;
 };
 
 type CallRow = {
@@ -69,6 +73,7 @@ type CallRow = {
   readonly topics: string | null;
   readonly entry_id: number | null;
   readonly entry_error: string | null;
+  readonly entry_sent_at: string | null;
 };
 
 const SPEAKERS: Readonly<Record<Track, Speaker>> = { mic: 'Você', tab: 'Outros' };
@@ -115,7 +120,12 @@ export function endCall(store: Store, id: number, state: 'ended' | 'cut'): CallS
 }
 
 /** One Call, whole, or a sentence that says there is no such Call. */
-export function viewOf(store: Store, id: number, transcribing: boolean): CallView {
+export function viewOf(
+  store: Store,
+  id: number,
+  transcribing: boolean,
+  sendingToWorklog = false,
+): CallView {
   const row = rowOf(store, id);
   const lines = store
     .prepare(
@@ -139,6 +149,7 @@ export function viewOf(store: Store, id: number, transcribing: boolean): CallVie
     topics: row.topics,
     entryId: row.entry_id,
     entryError: row.entry_error,
+    sendingToWorklog,
   };
 }
 
@@ -167,11 +178,14 @@ export function keepMinutes(store: Store, id: number, made: Made): void {
     .run(made.minutes, made.topics, made.title, made.title, id);
 }
 
-/** Keep the id of the Entry Worklog made for a Call, and forget any old error. */
+/**
+ * Keep the id of the Entry Worklog made for a Call and when it took the
+ * Topics, and forget any old error.
+ */
 export function keepEntry(store: Store, id: number, entryId: number): void {
   store
-    .prepare('UPDATE calls SET entry_id = ?, entry_error = NULL WHERE id = ?')
-    .run(entryId, id);
+    .prepare('UPDATE calls SET entry_id = ?, entry_sent_at = ?, entry_error = NULL WHERE id = ?')
+    .run(entryId, now(), id);
 }
 
 /** Say why a Call's Entry could not be sent to Worklog. */
@@ -293,6 +307,7 @@ function summaryOf(row: CallRow): CallSummary {
     state: row.state,
     startedAt: row.started_at,
     endedAt: row.ended_at,
+    sentToWorklogAt: row.entry_sent_at,
   };
 }
 

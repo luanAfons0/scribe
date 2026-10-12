@@ -67,6 +67,16 @@ const STEPS: readonly string[] = [
   ALTER TABLE calls ADD COLUMN entry_id INTEGER;
   ALTER TABLE calls ADD COLUMN entry_error TEXT;
   `,
+  // When the Topics last went to Worklog, now that they go only when the
+  // operator sends them. A Call the Minutes sent on their own before has an
+  // Entry already: it counts as sent when it ended, so it is not sent twice.
+  // A sentence the old send left says to make the Minutes again, which sends
+  // nothing now, so it goes.
+  `
+  ALTER TABLE calls ADD COLUMN entry_sent_at TEXT;
+  UPDATE calls SET entry_sent_at = COALESCE(ended_at, started_at) WHERE entry_id IS NOT NULL;
+  UPDATE calls SET entry_error = NULL;
+  `,
 ];
 
 /** Open `scribe.db`, and bring it up to the current version. */

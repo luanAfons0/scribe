@@ -27,6 +27,7 @@ const TOOLS = [
   'rename_call',
   'save_jottings',
   'save_minutes',
+  'send_to_worklog',
   'start_call',
   'stop_call',
   'update_settings',

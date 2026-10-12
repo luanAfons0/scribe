@@ -26,7 +26,10 @@ const cutNote = byId('cut-note');
 const jottingsBox = byId('call-jottings');
 const makeButton = byId('make-minutes');
 const minutesState = byId('minutes-state');
-const entryState = byId('entry-state');
+const topicsPart = byId('topics-part');
+const topicsText = byId('topics');
+const worklogState = byId('worklog-state');
+const sendButton = byId('send-worklog');
 const minutesView = byId('minutes');
 const renameButton = byId('rename');
 const renameForm = byId('rename-form');
@@ -113,6 +116,12 @@ async function showList() {
       meta.textContent =
         (found.title ? when(found.startedAt) + ' · ' : '') +
         lengthOf(found) + ' · ' + STATE_WORDS[found.state];
+      if (found.sentToWorklogAt !== null) {
+        const sent = document.createElement('span');
+        sent.className = 'sent-mark';
+        sent.textContent = 'Sent to Worklog';
+        meta.append(' · ', sent);
+      }
       link.append(name, meta);
       item.append(link);
       return item;
@@ -165,7 +174,13 @@ async function showCall(id) {
   transcribing.hidden = !found.transcribing;
   noTranscript.hidden = found.transcript.length > 0 || found.transcribing;
   showMinutes(found);
-  return found.state === 'recording' || found.transcribing || found.minutesState === 'making';
+  await showTopics(found);
+  return (
+    found.state === 'recording' ||
+    found.transcribing ||
+    found.minutesState === 'making' ||
+    found.sendingToWorklog
+  );
 }
 
 /** What a Call's Minutes say, or where they stand. */
@@ -195,10 +210,60 @@ function showMinutes(found) {
   makeButton.hidden = !over || !minutesForm.hidden;
   editButton.hidden = !over || !minutesForm.hidden || found.minutesState === 'making';
   minutesView.hidden = minutesView.hidden || !minutesForm.hidden;
-  makeButton.disabled = found.transcribing || found.minutesState === 'making';
+  makeButton.disabled =
+    found.transcribing || found.minutesState === 'making' || found.sendingToWorklog;
   makeButton.textContent = found.minutes === null ? 'Make Minutes' : 'Make Minutes again';
-  entryState.textContent = found.entryError === null ? '' : 'Worklog: ' + found.entryError;
-  entryState.hidden = found.entryError === null;
+}
+
+/** What the foot of the Topics says while nothing has gone to Worklog yet. */
+const NOT_SENT = 'Not sent. Only the title, the times and these Topics go to Worklog.';
+
+/**
+ * The Topics, read-only, and where they stand with Worklog. They show once
+ * the Minutes command wrote them, and nothing goes until the button is
+ * pressed.
+ */
+async function showTopics(found) {
+  topicsPart.hidden = found.topics === null || found.state === 'recording';
+  if (topicsPart.hidden) return;
+  topicsText.textContent = found.topics;
+  worklogState.classList.remove('fault');
+  sendButton.disabled = false;
+  sendButton.classList.add('go');
+  sendButton.textContent = found.sentToWorklogAt === null ? 'Send to Worklog' : 'Send again';
+
+  if (found.sendingToWorklog) {
+    worklogState.textContent = 'Sending the Topics to Worklog…';
+    sendButton.disabled = true;
+    sendButton.textContent = 'Sending…';
+  } else if (!(await worklogPluginSet())) {
+    const where = document.createElement('a');
+    where.href = '#settings';
+    where.textContent = 'Set it in Settings';
+    worklogState.replaceChildren('No Worklog Plugin is set. ', where);
+    sendButton.disabled = true;
+    sendButton.classList.remove('go');
+  } else if (found.entryError !== null) {
+    worklogState.textContent = found.entryError;
+    worklogState.classList.add('fault');
+  } else if (found.sentToWorklogAt !== null) {
+    worklogState.textContent =
+      'Sent to Worklog ' + when(found.sentToWorklogAt) + ', as one Done Entry.';
+    sendButton.classList.remove('go');
+  } else {
+    worklogState.textContent = NOT_SENT;
+  }
+}
+
+async function sendToWorklog() {
+  sendButton.disabled = true;
+  sendButton.textContent = 'Sending…';
+  try {
+    await call('send_to_worklog', { id: shownId() });
+  } catch (fault) {
+    say(fault);
+  }
+  show();
 }
 
 async function makeMinutes() {
@@ -364,6 +429,7 @@ moreLines.addEventListener('click', () => {
 
 startButton.addEventListener('click', start);
 makeButton.addEventListener('click', makeMinutes);
+sendButton.addEventListener('click', sendToWorklog);
 stopButton.addEventListener('click', () => stop(shownId()));
 liveStop.addEventListener('click', () => stop(Number(live.dataset.id)));
 window.addEventListener('hashchange', show);
