@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>scribe</title>
+<link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="jot.css">
+</head>
+<!-- The Popup: what FirstMate opens over the call when the operator presses
+     the Shortcut bound to jot.html. It shows the Jottings of the Call that
+     records, and Stop. It never records: a Call records on scribe's page in
+     the FirstMate window (ADR-0008). Drawn by jot.js. -->
+<body class="pop">
+<div class="pop-head" id="jot-live" hidden>
+  <span class="pop-dot" aria-hidden="true"></span>
+  <span class="pop-title" id="jot-title"></span>
+  <span class="pop-time" id="jot-time"></span>
+  <button class="act small" id="jot-stop" type="button">Stop</button>
+</div>
+<div class="pop-body" id="jot-body" hidden>
+  <textarea class="jottings" id="jot-jottings" aria-label="Jottings" spellcheck="true"
+    placeholder="Type as the call goes. A line that starts with # is a heading."></textarea>
+</div>
+<!-- No button and no link here: in the Popup, a link to the Host only hides
+     the Popup. It does not open scribe in the FirstMate window. -->
+<div class="pop-empty" id="jot-empty" hidden>
+  <h2>No Call is recording</h2>
+  <p>A Call records on scribe’s page in the FirstMate window. Start one there,
+    then press the Shortcut again to write.</p>
+</div>
+<div class="pop-foot">
+  <span id="jot-said" role="status"></span>
+  <span><kbd>Esc</kbd> hides</span>
+</div>
+<script src="rpc.js"></script>
+<script src="jottings.js"></script>
+<script src="time.js"></script>
+<script src="jot.js"></script>
+</body>
+</html>

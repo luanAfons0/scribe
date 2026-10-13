@@ -1,13 +1,13 @@
 # scribe
 
-A FirstMate Plugin that records a call in a browser tab, writes down what was
-said, and makes the Minutes from what you typed during it. It keeps the text,
+A FirstMate Plugin that records a call from the FirstMate window, writes down
+what was said, and makes the Minutes from what you typed during it. It keeps the text,
 never the audio: each chunk of audio is deleted as soon as Whisper has read
 it.
 
 Read [`CONTEXT.md`](CONTEXT.md) for the words this project uses — Call,
 Jottings, Transcript, Minutes, Cut — and [`docs/adr/`](docs/adr) for why a Call
-is recorded in a browser tab and why the Minutes come from a command.
+is recorded in the FirstMate window and why the Minutes come from a command.
 
 ## What it needs
 
@@ -22,8 +22,14 @@ is recorded in a browser tab and why the Minutes come from a command.
   the CPU. scribe fetches both from its Plugin Page when you ask, on Windows
   and on Linux, x64 and arm64. You can also build whisper.cpp yourself. On
   Windows the executable is `whisper-cli.exe`.
-- **Chrome or Edge**, for the tab that records the Call. Firefox and Safari
-  cannot share a tab's audio.
+- **sherpa-onnx's diarizer**, optional, which will tell the people in the
+  call's sound apart into Speakers after a Call stops. scribe fetches it from
+  its Plugin Page when you ask, on Windows x64 and Linux x64. The fetch is
+  ready, but scribe does not run the diarizer yet: that comes with #28. Until
+  then, the lines from the call's sound stay `Outros`.
+- **The FirstMate App on Windows**, to record a Call. scribe records in the
+  App's window, and the App gives a capture its sound on Windows only. On
+  Linux, scribe runs, but it refuses to start a Call (see "Record a Call").
 
 ### Get whisper.cpp from the Plugin Page
 
@@ -49,6 +55,33 @@ The Linux builds are the ones whisper.cpp makes on Ubuntu: they need glibc
 2.34 or newer and `libgomp.so.1`, which `gcc` brings. Where whisper.cpp
 publishes no build for the system, such as macOS, the Page says so and how to
 build one; build it as below and give its path.
+
+### Get the diarizer from the Plugin Page
+
+Press **Fetch the diarizer** under Diarizer, in the Settings view. scribe fetches
+three files from sherpa-onnx's GitHub releases, each checked against the
+SHA-256 pinned in `src/downloads.json`: the sherpa-onnx 1.13.8 build for this
+system, the pyannote segmentation 3.0 model and the 3D-Speaker CAM++ VoxCeleb
+embedding model (ADR-0007). That is 65 MB in all on Linux x64, and 275 MB on
+Windows x64, where the build that runs is the static one, which holds every
+sherpa-onnx program. Of the build, scribe keeps only
+`sherpa-onnx-offline-speaker-diarization` (`.exe` on Windows) and, on Linux,
+the `libonnxruntime.so` it loads, about 17 MB on Windows and 28 MB on Linux.
+It keeps them, with the two models, in one diarizer directory under
+`downloads/diarizer/`, and sets the diarizer to it. The Page shows how far the
+fetch got, and a fetch that fails is said in one sentence, with nothing kept,
+as for whisper.cpp.
+
+The diarizer is set when its directory holds all three files, side by side:
+
+| File | What it is |
+| ---- | ---------- |
+| `sherpa-onnx-offline-speaker-diarization` (`.exe` on Windows) | sherpa-onnx's program, with the libraries it loads. |
+| `segmentation.onnx` | The segmentation model, `model.onnx` of `sherpa-onnx-pyannote-segmentation-3-0`. |
+| `embedding.onnx` | The embedding model, `3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx`. |
+
+On another system, build sherpa-onnx as its README says, make such a
+directory by hand, and set `SCRIBE_DIARIZER` to it (see "Variables").
 
 ### Build whisper.cpp
 
@@ -90,7 +123,9 @@ shell or a systemd service.
 | whisper.cpp executable | The absolute path of `whisper-cli` (`whisper-cli.exe` on Windows). Needed to record. |
 | whisper.cpp model      | The absolute path of the model file, `ggml-small.bin`. Needed to record. |
 | Minutes command        | The command that makes the Minutes, as a JSON array: the program, then its arguments. Optional; see below. |
-| Worklog Plugin         | The Registry name of the Worklog Plugin a Call's Entry goes to. Optional; see below. |
+| Worklog Plugin         | The Registry name of the Worklog Plugin that Send to Worklog sends to. Optional; see below. |
+| Calendar               | Your Google Calendar's secret iCal address, for its Events. Optional; see "Events" below. |
+| Diarizer               | The diarizer directory, which **Fetch the diarizer** sets. Optional; see "Get the diarizer from the Plugin Page". |
 
 scribe keeps them in `settings.json`, in its own Plugin directory, beside
 `scribe.db`. A field left empty is none. A value that is not in its form, such
@@ -124,6 +159,8 @@ Host's systemd drop-in, and set the Minutes command on the Page instead.
 | `SCRIBE_WHISPER_MODEL`   | The whisper.cpp model.                                  |
 | `SCRIBE_MINUTES_COMMAND` | The Minutes command, as a JSON array.                   |
 | `SCRIBE_WORKLOG_PLUGIN`  | The Worklog Plugin.                                     |
+| `SCRIBE_CALENDAR_URL`    | The calendar's secret iCal address. scribe never prints it. |
+| `SCRIBE_DIARIZER`        | The diarizer directory: its program and its two models, as in "Get the diarizer from the Plugin Page". |
 
 These are set in the environment alone:
 
@@ -133,27 +170,100 @@ These are set in the environment alone:
 | `SCRIBE_CUT_AFTER_MS`    | How long a Call may go without audio before it is Cut. Default 60000. |
 | `SCRIBE_WORKLOG_WAIT_MS` | How long scribe waits for Worklog to answer. Default 30000. |
 | `SCRIBE_FETCH_IDLE_MS`   | How long a download may send nothing before it is given up. Default 60000. |
+| `SCRIBE_CALENDAR_READ_MS` | How often scribe reads the calendar again. Default 300000 (5 minutes). |
+| `SCRIBE_NOTICE_LEAD_MS`  | How long before an Event its Notice goes. Default 60000. |
 | `SCRIBE_DOWNLOADS`       | A list of downloads read in place of `src/downloads.json`. Tests point it at a server of their own; an operator has no reason to set it. |
 | `SCRIBE_NODE`            | The Node 24 that `mcp` runs in a `wsl` Place, when `PATH` has none. |
 
 One of the times that is not a whole number stops the Plugin Server at start
 with one sentence that names it, and the Index Page shows the Plugin Stopped.
 
+### Events
+
+scribe can read your Google Calendar, to know when a call comes. It reads
+the calendar's secret address in iCal format, and nothing else: no OAuth and
+no Google Cloud project (ADR-0006).
+
+1. Open Google Calendar on the web, and open **Settings** (the gear).
+2. Under **Settings for my calendars**, choose your calendar.
+3. Under **Integrate calendar**, copy **Secret address in iCal format**.
+4. Paste it in scribe's Settings, under **Calendar**, and press **Save**.
+
+The address is a secret: whoever holds it reads your whole calendar. Once
+saved, scribe shows it masked and never again. It is in no log line, no
+error and no tool result. **Replace** takes a new one, and **Remove** clears
+it, which turns Events off. Under it, Settings says when the calendar was
+last read and how many Events it holds, or why the read failed.
+
+scribe reads the address at start, every five minutes, and when you save it.
+It holds the Events in memory, not in `scribe.db`. An Event is an entry
+with a Google Meet link, in its conference data or else in its description
+or location. scribe skips an entry that is all day, cancelled, or that you
+declined. You are the calendar's owner, whose address Google writes as the
+calendar's name. When that name is not an address, scribe cannot tell who
+declined, so declined Events show too, and Settings says so in one sentence.
+The `list_events` tool gives the Events from now to the next day:
+the name, the start, the end and the Meet link of each, and nothing else.
+
+A recurring entry, such as a weekly 1:1 or a daily stand-up, gives each of
+its times. scribe reads a rule as Google writes it: daily, weekly or monthly,
+on given weekdays or days of the month, every so many, until a date or for a
+count of times. It also reads a time you removed from the series, and a time
+you moved or cancelled. A time keeps its wall clock in its own time zone, also
+across a change of daylight saving time. scribe skips a rule it cannot read,
+such as a yearly one: it gives no Event rather than one at a guessed time.
+
+A minute before each Event, scribe sends a Notice through FirstMate: the
+Event's name and "in 1 min" as the title, its time and "on Google Meet" as the
+body. Each Event gets one Notice, once. FirstMate takes one Notice from a
+Plugin every 5 s, so two Events at the same time give two Notices, 5 s apart.
+A click on the Notice opens scribe at the Event.
+
+On the Calls list, a banner shows the Event from five minutes before it
+until it ends, with **Open the Meet** and **Start a Call**. Further away, one
+line says the next Event. A calendar that cannot be read sends no Notice.
+The Calls list says so once, in one quiet line, and Settings says why.
+
+A Call you start from five minutes before an Event until it ends is for
+that Event. It takes the Event's name as its title, as if you gave it with
+**Rename**, so the Minutes do not replace it, and the Call's page says
+"Title from the Event". During two Events at once, the one that started
+last wins. The Call keeps only the Event's name and start, in `scribe.db`:
+never the address and never the Meet link. With no Event in reach, or no
+address, a Call starts with no title, as before.
+
+A Google Workspace admin can turn the secret address off. Then Settings says
+the address answered 404, there are no Events, and scribe records as before.
+A calendar that cannot be read never stops a Call.
+
 ## Record a Call
 
-1. Open scribe's Plugin Page in Chrome or Edge. In the FirstMate window,
-   *open in browser* in the strip does that, already admitted.
-2. Press **Start a Call**. Chrome's picker opens: choose the call's tab (a
-   Meet tab, say) and tick **Also share tab audio**. The page asks for the mic
-   next.
+1. Open scribe's Plugin Page in the FirstMate window. The call itself can run
+   in any app: Google Meet in a browser, or the Zoom or Teams app.
+2. Press **Start a Call**. The first time, the App asks whether scribe may
+   capture your screen or a window, and whether it may use the microphone. It
+   keeps both answers for scribe. Then it asks "What may scribe capture?", with
+   one button for each screen and window: choose any of them. On Windows the
+   capture brings the sound of the whole machine with it, so scribe hears the
+   call whatever you choose.
 3. A red line shows at the top of the page while the Call records, and the
    Transcript grows on the Call's page as Whisper reads the audio, about every
-   30 seconds. Lines from your mic are `Você`; lines from the tab are `Outros`.
-4. Press **Stop**, or *Stop sharing* in Chrome's bar. Whisper reads what is
-   left.
+   30 seconds. Lines from your mic are `Você`; lines from the call's sound are
+   `Outros`.
+4. Press **Stop**. Whisper reads what is left.
 
-Keep the recording tab open until you press Stop. Only one Call records at a
+You can switch to another Plugin or hide the window: the Call continues to
+record. Keep the App running until you press Stop. Only one Call records at a
 time; a second Start is refused with a sentence that names the running one.
+
+On Windows the capture takes every sound the machine plays, not only the
+call. Words from a video or a song that plays during the Call can show up as
+`Outros` lines.
+
+On Linux the App gives a capture with no sound (FirstMate ADR-0026). So scribe
+refuses to start a Call there: after you choose what to capture, it says that
+the capture brought no sound, and it does not record the mic alone. Record from
+the App on Windows (ADR-0008).
 
 v1 assumes headphones. On speakers, the mic hears the other people too, and
 their words can show up as `Você` lines as well as `Outros` ones.
@@ -175,7 +285,8 @@ and reads the Minutes from its stdout. The rules ask for:
   each;
 - `Decisões` and `Próximos passos` at the end;
 - the language of the Call;
-- a title on the first line, which replaces the date and time in the list;
+- a title on the first line, which replaces the date and time in the list,
+  unless the Call has a title from its Event or from you;
 - the Topics after the Minutes: what the Call talked about and a short
   summary, at most 20 lines. scribe takes them out of the Minutes and keeps
   them apart, for Worklog. A command that leaves them out still gives
@@ -238,10 +349,15 @@ same way.
 
 ### An Entry in Worklog
 
-When the command makes a Call's Minutes, scribe can send its Topics to
+scribe can send a Call's Topics to
 [Worklog](https://github.com/luanAfons0/worklog) as one `Done` Entry in the
-current Cycle, over the FirstMate Tool Bus. The Entry is titled with the
-Call's times, in this machine's time zone, and its title:
+current Cycle, over the FirstMate Tool Bus. Nothing goes on its own: making
+the Minutes sends nothing. The Call's page shows the Topics, read-only, under
+the Minutes, and they go to Worklog only when you press **Send to Worklog**.
+A test Call, or one you do not want logged, stays out of Worklog.
+
+The Entry is titled with the Call's times, in this machine's time zone, and
+its title:
 
 ```
 Reunião 14:00 - 15:10: Prazo da entrega
@@ -256,13 +372,21 @@ Turn it on in two steps. Give scribe a Grant to call Worklog:
 firstmate grant scribe worklog
 ```
 
-Then set **Worklog Plugin** to `worklog` in Settings.
+Then set **Worklog Plugin** to `worklog` in Settings. With none set, the
+button is disabled, and the page says where to set it.
 
-**Make Minutes again** changes the same Entry rather than adding one. Minutes
-edited by hand send nothing. When the Entry cannot be sent — no Grant,
-Worklog Stopped, no answer, or Minutes with no Topics — the Minutes stay as
-they are, and the Call's page says why. With no Worklog Plugin set, scribe
-sends nothing and says nothing.
+The page then says when the Topics were sent, such as "Sent to Worklog today
+at 14:55", and the list of Calls marks a sent Call. Making the Minutes again sends nothing. When it writes other
+Topics, the page says "The Topics changed since you sent them", and
+**Send again** changes the same Entry rather than adding one. When Worklog
+says that Entry is gone, because you deleted it there, scribe makes a new one
+and keeps it. When
+the Entry cannot be sent — no Grant, Worklog Stopped, or no answer — the Call
+stays unsent, the page says why, and the button says **Send again**. A Call with no Topics, because it still
+records or its Minutes are not made, has no button.
+
+Another Plugin with a Grant to scribe sends the same way, with the
+`send_to_worklog` tool.
 
 ### Find a Call again
 
@@ -283,10 +407,30 @@ The Call's page has a Jottings box, during the Call and after it. Every
 change is kept at once. A line that starts with `#` is a heading, and the
 Minutes keep your headings in your order.
 
+### The Popup
+
+The Popup lets you write the Jottings without leaving the call. Bind a
+Shortcut to scribe's `jot.html` once, in a terminal:
+
+```
+firstmate bind Ctrl+Shift+J scribe jot.html
+```
+
+Use the keys you want. Settings shows this line, with a Copy button. During a
+Call, press the Shortcut: FirstMate opens the Popup over the call. It shows
+the whole Jottings of the Call that records, and **Stop**. Every change is kept
+at once, so the Popup loses nothing when it hides. **Esc** hides it, and so
+does a click back into the call. Under the Jottings of a Call that records,
+the Call's page says the keys. The Call's page reads the Jottings again when
+it gets focus, so the two never write an old copy over each other.
+
+The Popup never records: a Call records only on scribe's page in the
+FirstMate window (ADR-0008). With no Call recording, the Popup says so, and
+says to start one there.
+
 ### A Cut Call
 
-When the recording tab closes, the browser quits or the machine sleeps, no
-audio comes. After `SCRIBE_CUT_AFTER_MS` of none (a minute), the Call is
+When the App quits or the machine sleeps during a Call, no audio comes. After `SCRIBE_CUT_AFTER_MS` of none (a minute), the Call is
 **Cut**: it keeps its Transcript so far and shows as Cut in the list. The same
 happens when the Plugin Server stops during a Call: the next time it starts,
 it marks that Call Cut and gives the audio it left to Whisper. A new Call can

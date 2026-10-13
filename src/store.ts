@@ -67,6 +67,30 @@ const STEPS: readonly string[] = [
   ALTER TABLE calls ADD COLUMN entry_id INTEGER;
   ALTER TABLE calls ADD COLUMN entry_error TEXT;
   `,
+  // When the Topics last went to Worklog, now that they go only when the
+  // operator sends them. A Call the Minutes sent on their own before has an
+  // Entry already: it counts as sent when it ended, so it is not sent twice.
+  // A sentence the old send left says to make the Minutes again, which sends
+  // nothing now, so it goes.
+  `
+  ALTER TABLE calls ADD COLUMN entry_sent_at TEXT;
+  UPDATE calls SET entry_sent_at = COALESCE(ended_at, started_at) WHERE entry_id IS NOT NULL;
+  UPDATE calls SET entry_error = NULL;
+  `,
+  // When the Minutes last wrote Topics other than the ones there were, so the
+  // Call can say its Topics changed since they went to Worklog. Topics written
+  // before this step went to Worklog on their own, as they were written, so
+  // they stay null: no Call counts as changed until its Topics change again.
+  `
+  ALTER TABLE calls ADD COLUMN topics_written_at TEXT;
+  `,
+  // The Event a Call was started for: its name and its start, and nothing
+  // else of it. The calendar's address and the Meet link are never kept
+  // (ADR-0006). A Call from before this step was started for no Event.
+  `
+  ALTER TABLE calls ADD COLUMN event_name TEXT;
+  ALTER TABLE calls ADD COLUMN event_start TEXT;
+  `,
 ];
 
 /** Open `scribe.db`, and bring it up to the current version. */

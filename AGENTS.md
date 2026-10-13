@@ -1,6 +1,6 @@
 # scribe
 
-scribe is a FirstMate Plugin. It records a Call that runs in a browser tab,
+scribe is a FirstMate Plugin. It records a Call from the FirstMate window,
 turns its audio into a Transcript with whisper.cpp, and makes the Minutes from
 the Jottings and the Transcript with a command the operator chooses. It is a
 Plugin Server with one SQLite file behind it, and a Plugin Page.
@@ -71,12 +71,17 @@ src/           the Plugin Server. Every file is one job.
                it whole through a rename.
   downloads.ts what can be fetched: read downloads.json, or the list
                SCRIBE_DOWNLOADS names (ADR-0005).
-  downloads.json each whisper.cpp build and model, with its URL, size and
+  downloads.json each whisper.cpp build and model, and each sherpa-onnx
+               build and the diarizer's two models, with its URL, size and
                pinned SHA-256, as data.
-  fetcher.ts   fetch a build or a model when the Page asks, check it, keep it
-               under downloads/, and set it.
-  unpack.ts    a zip or a tar.gz, unpacked inside one directory, by scribe's
-               own reader over node:zlib.
+  fetcher.ts   fetch a build or a model, or the diarizer, when the Page asks,
+               check it, keep it under downloads/, and set it.
+  unpack.ts    a zip, a tar.gz or a tar.bz2, unpacked inside one directory, by
+               scribe's own reader over node:zlib and bzip2.ts; all of it, or
+               only the members the caller names.
+  bzip2.ts     scribe's own bzip2 decoder, as node:zlib has none (ADR-0007). It
+               reads a chunk at a time and gives a block at a time, so a
+               sherpa-onnx build is never held whole.
   command.ts   a command's form, a JSON array of program and arguments, read
                in one place; and its program, found on the PATH.
   run.ts       run a program with no shell, on Windows and Linux, and end its
@@ -89,8 +94,19 @@ src/           the Plugin Server. Every file is one job.
                Transcript lines it heard.
   minutes.ts   the prompt, the Minutes command, and the title it proposes.
   minutes-maker.ts when the Minutes are made: after Stop, and on request.
-  worklog-entry.ts the Call's Entry in Worklog: its title, its Topics, and
-               why it was not sent, when it was not.
+  worklog-entry.ts the Call's Entry in Worklog, sent only by send_to_worklog,
+               when the operator presses Send to Worklog: its title, its
+               Topics, and why it was not sent, when it was not.
+  ical.ts      the iCal text, read by scribe's own reader: unfolded lines,
+               properties, and times through Intl (ADR-0006).
+  events.ts    which entries of the feed are Events, and when each happens:
+               moved, cancelled and removed times of a series included.
+  recurrence.ts an RRULE as Google writes it, expanded in wall time; a rule
+               it cannot read gives no Event (ADR-0006).
+  calendar.ts  the calendar's secret address, read now and every few
+               minutes; the Events, held in memory; the last read's result.
+  notices.ts   a Notice through the Host a minute before each Event, once,
+               one every 5 s (FirstMate ADR-0014).
   bus.ts       the Tool Bus, from this end of the pipe: ask the Host to call
                another Plugin's tool, and read its answer by id.
   tools.ts     the tools this Plugin ships, for the Page.
@@ -99,20 +115,37 @@ web/           the Plugin Page, as the Host serves it.
   index.html   the Plugin Page, drawn by app.js.
   rpc.js       call(): one tool call over POST rpc.
   app.js       the list of Calls, one Call, and Start and Stop.
-  settings.js  the Settings view: the four settings, who decides each, and
+  settings.js  the Settings view: the settings, who decides each, and
                what is missing.
-  downloads.js the offers to fetch whisper.cpp and a model, and how far each
-               download got.
-  jottings.js  keepJottings(): the box that keeps every change at once.
+  calendar.js  the calendar's secret address in Settings: masked once saved,
+               and what its last read gave.
+  events.js    the Calls list's Event: a banner from five minutes before it
+               until it ends, or the next one in one line.
+  downloads.js the offers to fetch whisper.cpp, a model and the diarizer, and
+               how far each download got.
+  jottings.js  keepJottings(): the box that keeps every change at once, and
+               takes the text the Popup saved.
+  jot.html     the Popup a Shortcut opens: the Jottings of the Call that
+               records, and Stop. It never records (ADR-0008).
+  jot.js       draws jot.html. jot.css is its look, on top of app.css.
+  shortcut.js  the Settings view's firstmate bind command line, and Copy.
+  time.js      a moment and a length of time, as the Page and the Popup say
+               them.
   markdown.js  the small Markdown renderer for the Minutes, as Worklog's.
-  capture.js   startCapture(): the tab and the mic, sent in chunks (ADR-0001).
+  capture.js   startCapture(): the capture's sound and the mic, sent in chunks
+               (ADR-0008).
   pcm-tap.js   the AudioWorklet that cuts a track into 16-bit PCM chunks.
   app.css      the one stylesheet.
 tests/         one file per behaviour, plus helpers/ and fixtures/.
   fixtures/    whisper and minutes, fixture executables, each with its Windows
                form beside it (whisper.cmd, minutes.cmd), and model.bin;
-               whisper-build.zip and .tar.gz, the fixture whisper packed as a
-               build; escape.zip and .tar.gz, builds that reach outside.
+               whisper-build.zip, .tar.gz and .tar.bz2, the fixture whisper
+               packed as a build; whisper-build-streams.tar.bz2, the same with a
+               file of four bzip2 blocks, in two streams; escape.zip, .tar.gz
+               and .tar.bz2, builds that reach outside. diarizer-build.tar.bz2,
+               segmentation.tar.bz2 and embedding.onnx, a fake diarizer and
+               its two models; diarizer-escape.tar.bz2, a build with a member
+               that reaches outside.
 docs/adr/      the decisions that are expensive to reverse.
 docs/agents/   how an agent works in this repo. See "Agent skills" below.
 ```
@@ -157,7 +190,7 @@ not the project's. Git ignores all four.
 - The suite runs on Linux and on Windows. A test that only makes sense on one
   skips on the other and says why, as `wrapper.test.ts` does.
 - **The Page as bytes**: `tests/page.test.ts` reads `web/` off disk, because
-  no test drives a browser. Recording needs a human click in Chrome's picker,
+  no test drives a browser. Recording needs a human click in the App's dialog,
   so it is checked by hand.
 - A test name is a sentence about behaviour:
   `'with no whisper.cpp set, recording is refused with a sentence that names the setting'`.
@@ -197,9 +230,11 @@ not the project's. Git ignores all four.
 - Keep audio longer than it takes Whisper to read it.
 - Send the audio, the Jottings or the Transcript anywhere but the Minutes
   command the operator set. scribe knows no model and holds no key (ADR-0002).
-  Worklog gets a Call's title, its times and its Topics, and nothing else.
+  Worklog gets a Call's title, its times and its Topics, and nothing else,
+  and only on Send to Worklog.
 - Edit a Transcript. It is the record of the Call.
-- Record in the FirstMate window or the Popup (ADR-0001).
+- Record anywhere but scribe's Plugin Page in the FirstMate window. The Popup
+  never records (ADR-0008).
 - Tell the other people on the call anything, or join or post to a call.
 - Load anything from a CDN, or name an absolute path in the Page.
 - Print or commit a real `scribe.db`, FirstMate's token or `runtime.json`.

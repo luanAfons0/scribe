@@ -8,8 +8,8 @@
  * track's place is counted in samples, so a line's moment comes from the audio
  * itself and never from a clock.
  *
- * A Call ends without Stop when its page goes away: the tab closed, the
- * browser quit, the machine slept. Then no audio comes, and after
+ * A Call ends without Stop when its page goes away: the FirstMate App quit,
+ * the machine slept. Then no audio comes, and after
  * `SCRIBE_CUT_AFTER_MS` of none the Call is Cut, with what Whisper has heard
  * so far. A Plugin Server that starts and finds a Call still recording has no
  * page sending to it — the page was sending to the one that went away — so
@@ -23,7 +23,13 @@ import {
   takeWindow,
   type Track,
 } from './audio.ts';
-import { endCall, recordingCall, startCall, type CallSummary } from './calls.ts';
+import {
+  endCall,
+  recordingCall,
+  startCall,
+  type CallEvent,
+  type CallSummary,
+} from './calls.ts';
 import { badInput } from './mcp.ts';
 import type { Choices, Settings } from './settings.ts';
 import type { Transcriber } from './transcriber.ts';
@@ -46,7 +52,8 @@ export type Appended = {
 
 /** The one Call that records, and what is done with its audio. */
 export type Recorder = {
-  start(): CallSummary;
+  /** Start a Call, for this Event when it was started for one. */
+  start(event: CallEvent | null): CallSummary;
   append(callId: number, track: Track, seq: number, pcm: Buffer): Appended;
   stop(id: number | null): CallSummary;
 };
@@ -114,11 +121,11 @@ export function recorderFor(
   }, Math.min(CHECK_MS, settings.cutAfterMs)).unref();
 
   return {
-    start() {
+    start(event) {
       // A Call with no whisper.cpp would keep audio nobody reads, so it is
       // refused with the sentence that names the setting (ADR-0004).
       choices.whisper();
-      const call = within(store, () => startCall(store));
+      const call = within(store, () => startCall(store, event));
       live = {
         callId: call.id,
         next: { mic: 0, tab: 0 },

@@ -10,10 +10,12 @@
  * Index Page shows; the journal is for what went wrong.
  */
 import { receive } from './bus.ts';
+import { calendarFor } from './calendar.ts';
 import { readDownloads } from './downloads.ts';
 import { fetcherFor } from './fetcher.ts';
 import { sentenceFor, serve } from './mcp.ts';
 import { minutesMakerFor, type MinutesMaker } from './minutes-maker.ts';
+import { noticesFor } from './notices.ts';
 import { recorderFor } from './recorder.ts';
 import { endEveryTree } from './run.ts';
 import { openChoices, readSettings } from './settings.ts';
@@ -48,18 +50,17 @@ let maker: MinutesMaker | null = null;
 const heard = (id: number): void => maker?.heard(id);
 const transcriber = transcriberFor(store, choices, heard);
 const sender = entrySenderFor(store, settings, choices);
-maker = minutesMakerFor(
-  store,
-  settings,
-  choices,
-  (id) => transcriber.busyWith(id),
-  (id) => sender.made(id),
-);
+maker = minutesMakerFor(store, settings, choices, (id) => transcriber.busyWith(id));
 const recorder = recorderFor(store, transcriber, settings, choices, heard);
 
 const fetcher = fetcherFor(downloads, choices, settings);
+const calendar = calendarFor(choices, settings);
+noticesFor(calendar, settings);
 
-serve(toolsFor({ store, recorder, transcriber, maker, choices, fetcher }), receive);
+serve(
+  toolsFor({ store, recorder, transcriber, maker, sender, choices, fetcher, calendar }),
+  receive,
+);
 
 // No whisper.cpp and no Minutes command outlives the Plugin Server (ADR-0003).
 // The Host closes stdin to stop it, and nobody is left to answer then, so it

@@ -20,6 +20,7 @@ import {
   saveMinutes,
   viewOf,
 } from './calls.ts';
+import { eventAt, type Calendar } from './calendar.ts';
 import type { Fetcher } from './fetcher.ts';
 import { badInput } from './mcp.ts';
 import type { Tool, ToolResult } from './mcp.ts';
@@ -28,6 +29,7 @@ import type { Recorder } from './recorder.ts';
 import type { Choices } from './settings.ts';
 import { within, type Store } from './store.ts';
 import type { Transcriber } from './transcriber.ts';
+import type { EntrySender } from './worklog-entry.ts';
 
 const ID = { type: 'integer', description: 'The id of the Call, from list_calls.' };
 
@@ -37,14 +39,26 @@ export type Parts = {
   readonly recorder: Recorder;
   readonly transcriber: Transcriber;
   readonly maker: MinutesMaker;
+  readonly sender: EntrySender;
   readonly choices: Choices;
   readonly fetcher: Fetcher;
+  readonly calendar: Calendar;
 };
+
+/** list_events answers the Events from now until this much later: the next day. */
+const EVENTS_AHEAD_MS = 24 * 60 * 60_000;
 
 /** The tools, over the parts of one running Plugin Server. */
 export function toolsFor(parts: Parts): readonly Tool[] {
-  const { store, recorder, transcriber, maker, choices, fetcher } = parts;
-  const view = (id: number) => viewOf(store, id, transcriber.busyWith(id));
+  const { store, recorder, transcriber, maker, sender, choices, fetcher, calendar } = parts;
+  const view = (id: number) =>
+    viewOf(store, id, transcriber.busyWith(id), sender.sending(id));
+  // The calendar's address is never in it: only whether it is set, and what
+  // its last read gave (ADR-0006).
+  const settingsView = () => {
+    const settings = choices.view();
+    return { ...settings, calendarUrl: { ...settings.calendarUrl, read: calendar.lastRead() } };
+  };
 
   return [
     {
@@ -77,16 +91,19 @@ export function toolsFor(parts: Parts): readonly Tool[] {
       name: 'start_call',
       description:
         'Start a Call. It is refused while another Call records, with a sentence that names it, ' +
-        'and while whisper.cpp or its model is missing, with a sentence that names the setting.',
+        'and while whisper.cpp or its model is missing, with a sentence that names the setting. ' +
+        'From five minutes before an Event until it ends, the Call is for that Event: its ' +
+        'event is { name, start }, and its title is the Event\'s name, as one given with ' +
+        'rename_call. Of two such Events, the one that started last.',
       inputSchema: { type: 'object', properties: {}, required: [] },
-      call: () => told({ call: recorder.start() }),
+      call: () => told({ call: recorder.start(eventAt(calendar, Date.now())) }),
     },
 
     {
       name: 'append_audio',
       description:
         'Keep one chunk of the audio of the Call that records: 16 kHz mono 16-bit PCM, as ' +
-        'base64, from the mic or from the shared tab. Chunks of a track are numbered from 0.',
+        'base64, from the mic or from the call\'s sound. Chunks of a track are numbered from 0.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -149,9 +166,41 @@ export function toolsFor(parts: Parts): readonly Tool[] {
       description:
         'Make the Minutes of a Call again, from its Jottings and its Transcript, with the ' +
         'Minutes command in get_settings. It starts the work and answers the Call at once; ' +
-        'get_call shows minutesState "made", or "failed" with minutesError.',
+        'get_call shows minutesState "made", or "failed" with minutesError. It sends nothing ' +
+        'to Worklog: when it writes other Topics on a sent Call, get_call shows ' +
+        'topicsChangedSinceSent until send_to_worklog sends them again.',
       inputSchema: { type: 'object', properties: { id: ID }, required: ['id'] },
-      call: (given) => told({ call: maker.make(checkCallId('make_minutes', given['id'])) }),
+      call: (given) => {
+        const id = checkCallId('make_minutes', given['id']);
+        // Minutes made while the Topics are on their way would count as sent,
+        // though Worklog got the old ones.
+        if (sender.sending(id)) {
+          throw badInput(
+            `The Topics of Call ${id} are being sent to Worklog. ` +
+              'Make its Minutes when that is done.',
+          );
+        }
+        maker.make(id);
+        return told({ call: view(id) });
+      },
+    },
+
+    {
+      name: 'send_to_worklog',
+      description:
+        'Send the Topics of an ended or Cut Call to the Worklog Plugin in get_settings, as ' +
+        'one Done Entry with the Call\'s title and times; a Call sent before changes the ' +
+        'same Entry. Nothing else leaves scribe, and nothing goes to Worklog until this is ' +
+        'called. It starts the send and answers the Call at once; get_call shows ' +
+        'sentToWorklogAt, or entryError with the sentence Worklog or the Host said. It is ' +
+        'refused while the Call records, while it has no Topics, with no Worklog Plugin ' +
+        'set, and while its Topics are being sent.',
+      inputSchema: { type: 'object', properties: { id: ID }, required: ['id'] },
+      call: (given) => {
+        const id = checkCallId('send_to_worklog', given['id']);
+        sender.send(id);
+        return told({ call: view(id) });
+      },
     },
 
     {
@@ -211,14 +260,22 @@ export function toolsFor(parts: Parts): readonly Tool[] {
       description:
         'The settings the operator chooses: whisper (the whisper.cpp executable), whisperModel ' +
         '(its model), minutesCommand (the program and arguments that make the Minutes) and ' +
-        'worklogPlugin (the Plugin a Call\'s Entry goes to). Each has the value scribe uses ' +
+        'worklogPlugin (the Plugin a Call\'s Entry goes to) and diarizer (the directory of ' +
+        'sherpa-onnx\'s diarizer and its two models, which tells the call\'s sound apart into ' +
+        'Speakers; none is no problem). Each has the value scribe uses ' +
         '(null for none); from: "environment" when its variable is set, "file" when the ' +
         'settings file holds it, "default" for none; saved, what the settings file holds; ' +
         'variable, the one that beats the file; problem, the one sentence that says what ' +
         'is missing or wrong, or null; and ignored, the one sentence that says its variable ' +
-        'is set, not in its form, and ignored, or null.',
+        'is set, not in its form, and ignored, or null. calendarUrl, the calendar\'s secret ' +
+        'iCal address, is never shown: it has set and saved as true or false in place of ' +
+        'value and saved, and read, what the last read gave: { at, count, problem, ' +
+        'declined }, where count is how many Events the calendar holds, problem the ' +
+        'sentence of a read that failed, and declined the sentence that says declined ' +
+        'Events are not skipped, as the calendar\'s name gives no owner; or null before ' +
+        'the first read.',
       inputSchema: { type: 'object', properties: {}, required: [] },
-      call: () => told({ settings: choices.view() }),
+      call: () => told({ settings: settingsView() }),
     },
 
     {
@@ -250,12 +307,46 @@ export function toolsFor(parts: Parts): readonly Tool[] {
             type: ['string', 'null'],
             description: "The Registry name of the Worklog Plugin a Call's Entry goes to.",
           },
+          diarizer: {
+            type: ['string', 'null'],
+            description:
+              'The absolute path of the diarizer directory: sherpa-onnx-offline-speaker-' +
+              'diarization, segmentation.onnx and embedding.onnx, side by side.',
+          },
+          calendarUrl: {
+            type: ['string', 'null'],
+            description:
+              'The calendar\'s "Secret address in iCal format", from Google Calendar\'s ' +
+              'settings. scribe reads it now and every few minutes, and never shows it again.',
+          },
         },
         required: [],
       },
       call: (given) => {
         choices.update(given);
-        return told({ settings: choices.view() });
+        if ('calendarUrl' in given) calendar.reread();
+        return told({ settings: settingsView() });
+      },
+    },
+
+    {
+      name: 'list_events',
+      description:
+        'The Events from now until the next day, by start: each Event of the calendar that ' +
+        'has a Google Meet link, is not all day, not cancelled and not declined, and has not ' +
+        'ended. Each has name, start and end (ISO 8601 instants) and meet, its Google Meet ' +
+        'link. With no calendar address, or before its first read, there are none.',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+      call: () => {
+        const now = Date.now();
+        return told({
+          events: calendar.between(now, now + EVENTS_AHEAD_MS).map((event) => ({
+            name: event.name,
+            start: new Date(event.start).toISOString(),
+            end: new Date(event.end).toISOString(),
+            meet: event.meet,
+          })),
+        });
       },
     },
 
@@ -265,9 +356,12 @@ export function toolsFor(parts: Parts): readonly Tool[] {
         'What scribe can fetch for this system, and how far each download got. whisper: the ' +
         'release, the build for this system (null when whisper.cpp publishes none, with ' +
         'missing, the sentence that says how to get one) and fetch. models: the models ' +
-        'offered, each with its size in bytes, and fetch. A fetch is null when none runs, ' +
-        'or { name, received, size, failed }, where failed is null while it runs and the ' +
-        'one sentence it failed with after. Nothing is fetched by this tool.',
+        'offered, each with its size in bytes, and fetch. diarizer: the sherpa-onnx release, ' +
+        'this system as a person names it (system), the build for this system with both ' +
+        'models, as their size in bytes together (null where none is offered, with ' +
+        'missing, the sentence that says how to get one), and fetch. A fetch is null when ' +
+        'none runs, or { name, received, size, failed }, where failed is null while it runs ' +
+        'and the one sentence it failed with after. Nothing is fetched by this tool.',
       inputSchema: { type: 'object', properties: {}, required: [] },
       call: () => told({ downloads: fetcher.view() }),
     },
@@ -302,6 +396,21 @@ export function toolsFor(parts: Parts): readonly Tool[] {
       },
       call: (given) => {
         fetcher.fetchModel(given['name']);
+        return told({ downloads: fetcher.view() });
+      },
+    },
+
+    {
+      name: 'fetch_diarizer',
+      description:
+        'Fetch the sherpa-onnx diarizer for this system and its two models, check each ' +
+        'against its SHA-256, keep only what the diarizer needs as one directory under ' +
+        'downloads/ in the Plugin directory, and set diarizer to it. It starts the download ' +
+        'and answers what get_downloads answers at once. It is refused where no build is ' +
+        'offered for this system, and while one is being fetched.',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+      call: () => {
+        fetcher.fetchDiarizer();
         return told({ downloads: fetcher.view() });
       },
     },

@@ -7,7 +7,7 @@
  * It also writes the list of downloads scribe reads in place of its own
  * (`SCRIBE_DOWNLOADS`), with URLs on this server and the SHA-256 of the bytes
  * the test meant to serve, so a test can serve other bytes and see them
- * refused.
+ * refused. sherpa-onnx's releases are played the same way.
  */
 import { createHash } from 'node:crypto';
 import { createServer, type ServerResponse } from 'node:http';
@@ -85,10 +85,43 @@ export type Download = {
 };
 
 /** A whisper.cpp build, as the list of downloads names it. */
-export type Build = Download & { readonly format: 'zip' | 'tar.gz'; readonly program: string };
+export type Build = Download & {
+  readonly format: 'zip' | 'tar.gz' | 'tar.bz2';
+  readonly program: string;
+};
 
 /** A model, as the list of downloads names it. */
 export type Model = Download & { readonly name: string };
+
+/** A sherpa-onnx build, as the list of downloads names it: the members of it kept. */
+export type DiarizerBuild = Download & {
+  readonly format: 'zip' | 'tar.gz' | 'tar.bz2';
+  readonly keep: readonly string[];
+};
+
+/** The diarizer, as the list of downloads names it: its builds and its two models. */
+export type Diarizer = {
+  readonly release: string;
+  readonly builds: Readonly<Record<string, DiarizerBuild>>;
+  /** The segmentation model: an archive, and the one member of it kept. */
+  readonly segmentation: Download & { readonly format: 'tar.bz2'; readonly member: string };
+  /** The embedding model: one file. */
+  readonly embedding: Download;
+};
+
+/** A diarizer with no build for any system, for a test that is not about it. */
+const NO_DIARIZER: Diarizer = {
+  release: '0.0.1',
+  builds: {},
+  segmentation: {
+    url: 'http://127.0.0.1:9/segmentation.tar.bz2',
+    size: 1,
+    sha256: '0'.repeat(64),
+    format: 'tar.bz2',
+    member: 'segmentation/model.onnx',
+  },
+  embedding: { url: 'http://127.0.0.1:9/embedding.onnx', size: 1, sha256: '0'.repeat(64) },
+};
 
 /** One download of these bytes at this address. */
 export function download(url: string, bytes: Buffer): Download {
@@ -107,6 +140,8 @@ export async function downloadsFile(
     readonly models: readonly Model[];
     /** The model the Page offers first; without one, the first model, or none. */
     readonly defaultModel?: string | null;
+    /** The diarizer; without one, a diarizer with no build. */
+    readonly diarizer?: Diarizer;
   },
 ): Promise<Record<string, string>> {
   const directory = await makeDirectory(t);
@@ -116,6 +151,7 @@ export async function downloadsFile(
     models: list.models,
     defaultModel:
       list.defaultModel === undefined ? (list.models[0]?.name ?? null) : list.defaultModel,
+    diarizer: list.diarizer ?? NO_DIARIZER,
   };
   await writeFile(path, JSON.stringify(whole));
   return { SCRIBE_DOWNLOADS: path };

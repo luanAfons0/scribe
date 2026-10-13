@@ -6,8 +6,8 @@
  * work: the Call shows `making`, then `made` or `failed` with the sentence
  * that says why. A Call that is Cut gets its Minutes only when someone asks,
  * so a Plugin Server that starts after a crash does not run a model on its
- * own. Once the command's Minutes are kept, `made` hears of it: that is when
- * the Call's Entry goes to Worklog, and never after Minutes saved by hand.
+ * own. Making them sends nothing to Worklog: the operator reads the Topics
+ * and sends them by hand.
  */
 import {
   forgetUnfinishedMinutes,
@@ -40,7 +40,6 @@ export function minutesMakerFor(
   settings: Pick<Settings, 'minutesTimeoutMs'>,
   choices: Pick<Choices, 'minutesCommand' | 'minutesCommandSet'>,
   busyWith: (id: number) => boolean,
-  made: (id: number) => void,
 ): MinutesMaker {
   within(store, () => forgetUnfinishedMinutes(store));
 
@@ -48,7 +47,6 @@ export function minutesMakerFor(
     within(store, () => setMinutesState(store, call.id, 'making'));
     makeMinutes(command, promptFor(call), settings.minutesTimeoutMs)
       .then((answer) => within(store, () => keepMinutes(store, call.id, answer)))
-      .then(() => made(call.id))
       .catch((fault: unknown) => {
         // Whatever went wrong — the command, or keeping what it printed — is
         // the Call's to show. It never takes the Plugin Server down with it.

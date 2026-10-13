@@ -50,6 +50,22 @@ export function callPlugin(
   args: Readonly<Record<string, unknown>>,
   waitMs: number,
 ): Promise<BusResult> {
+  return askHost(
+    'firstmate/tools/call',
+    { plugin, name, arguments: args, timeoutMs: waitMs + HOST_MARGIN_MS },
+    waitMs,
+  );
+}
+
+/**
+ * Put one request to the Host on stdout, and read its answer by the id it was
+ * sent with: a tool call over the Tool Bus, or a Notice.
+ */
+export function askHost(
+  method: string,
+  params: Readonly<Record<string, unknown>>,
+  waitMs: number,
+): Promise<BusResult> {
   const id = `scribe-${(counter += 1)}`;
   return new Promise<BusResult>((done) => {
     const timer = setTimeout(() => {
@@ -63,11 +79,6 @@ export function callPlugin(
       else done({ kind: 'answered', result: answer.result });
     });
 
-    reply({
-      jsonrpc: '2.0',
-      id,
-      method: 'firstmate/tools/call',
-      params: { plugin, name, arguments: args, timeoutMs: waitMs + HOST_MARGIN_MS },
-    });
+    reply({ jsonrpc: '2.0', id, method, params });
   });
 }

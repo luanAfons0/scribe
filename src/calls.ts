@@ -20,6 +20,16 @@ export type Speaker = 'Você' | 'Outros';
 /** Where the Minutes of a Call stand. */
 export type MinutesState = 'none' | 'making' | 'made' | 'failed';
 
+/**
+ * The Event a Call was started for, as the Call keeps it: its name and when it
+ * started, never the calendar's address or the Meet link (ADR-0006).
+ */
+export type CallEvent = {
+  readonly name: string;
+  /** When the Event starts, as an ISO 8601 instant. */
+  readonly start: string;
+};
+
 /** One Call as the list shows it: no Jottings, Transcript or Minutes. */
 export type CallSummary = {
   readonly id: number;
@@ -28,6 +38,10 @@ export type CallSummary = {
   readonly state: CallState;
   readonly startedAt: string;
   readonly endedAt: string | null;
+  /** When the Topics last went to Worklog, or null while they never did. */
+  readonly sentToWorklogAt: string | null;
+  /** The Event the Call was started for, or null when it was for none. */
+  readonly event: CallEvent | null;
 };
 
 /** One line of a Transcript, timed from the start of its Call. */
@@ -54,6 +68,13 @@ export type CallView = CallSummary & {
   readonly entryId: number | null;
   /** Why the last Entry could not be sent to Worklog, when it could not. */
   readonly entryError: string | null;
+  /** Whether the Topics are on their way to Worklog now. */
+  readonly sendingToWorklog: boolean;
+  /**
+   * Whether the Minutes wrote other Topics after the last good send, so
+   * Worklog holds an old version of them.
+   */
+  readonly topicsChangedSinceSent: boolean;
 };
 
 type CallRow = {
@@ -69,6 +90,10 @@ type CallRow = {
   readonly topics: string | null;
   readonly entry_id: number | null;
   readonly entry_error: string | null;
+  readonly entry_sent_at: string | null;
+  readonly topics_written_at: string | null;
+  readonly event_name: string | null;
+  readonly event_start: string | null;
 };
 
 const SPEAKERS: Readonly<Record<Track, Speaker>> = { mic: 'Você', tab: 'Outros' };
@@ -89,17 +114,32 @@ export function recordingCall(store: Store): CallSummary | null {
   return row === undefined ? null : summaryOf(row);
 }
 
-/** Start a Call, or refuse with a sentence that names the one that records. */
-export function startCall(store: Store): CallSummary {
+/**
+ * Start a Call, or refuse with a sentence that names the one that records. A
+ * Call started for an Event takes the Event's name as a title the operator
+ * gave, so no Minutes replace it.
+ */
+export function startCall(store: Store, event: CallEvent | null = null): CallSummary {
   const running = recordingCall(store);
   if (running !== null) {
     throw badInput(
       `${nameOf(running)} is still recording. Stop it before you start another Call.`,
     );
   }
+  // An Event with no name gives no title: the Minutes propose one.
+  const named = event !== null && event.name !== '';
   const row = store
-    .prepare("INSERT INTO calls (state, started_at) VALUES ('recording', ?) RETURNING *")
-    .get(now()) as CallRow;
+    .prepare(
+      'INSERT INTO calls (state, started_at, title, title_given, event_name, event_start) ' +
+        "VALUES ('recording', ?, ?, ?, ?, ?) RETURNING *",
+    )
+    .get(
+      now(),
+      named ? event.name : null,
+      named ? 1 : 0,
+      event?.name ?? null,
+      event?.start ?? null,
+    ) as CallRow;
   return summaryOf(row);
 }
 
@@ -115,7 +155,12 @@ export function endCall(store: Store, id: number, state: 'ended' | 'cut'): CallS
 }
 
 /** One Call, whole, or a sentence that says there is no such Call. */
-export function viewOf(store: Store, id: number, transcribing: boolean): CallView {
+export function viewOf(
+  store: Store,
+  id: number,
+  transcribing: boolean,
+  sendingToWorklog = false,
+): CallView {
   const row = rowOf(store, id);
   const lines = store
     .prepare(
@@ -139,6 +184,8 @@ export function viewOf(store: Store, id: number, transcribing: boolean): CallVie
     topics: row.topics,
     entryId: row.entry_id,
     entryError: row.entry_error,
+    sendingToWorklog,
+    topicsChangedSinceSent: changedSinceSent(row),
   };
 }
 
@@ -156,22 +203,28 @@ export function setMinutesState(
 
 /**
  * Keep the Minutes a command made, with its Topics, and its title unless the
- * operator gave the Call one of their own.
+ * operator gave the Call one of their own. The time the Topics were written
+ * moves only when they are not the ones there were, so Minutes made again
+ * with the same Topics do not count as a change since they were sent.
  */
 export function keepMinutes(store: Store, id: number, made: Made): void {
   store
     .prepare(
       "UPDATE calls SET minutes = ?, topics = ?, minutes_state = 'made', minutes_error = NULL, " +
+        'topics_written_at = CASE WHEN topics IS ? THEN topics_written_at ELSE ? END, ' +
         'title = CASE WHEN title_given = 1 OR ? IS NULL THEN title ELSE ? END WHERE id = ?',
     )
-    .run(made.minutes, made.topics, made.title, made.title, id);
+    .run(made.minutes, made.topics, made.topics, now(), made.title, made.title, id);
 }
 
-/** Keep the id of the Entry Worklog made for a Call, and forget any old error. */
+/**
+ * Keep the id of the Entry Worklog made for a Call and when it took the
+ * Topics, and forget any old error.
+ */
 export function keepEntry(store: Store, id: number, entryId: number): void {
   store
-    .prepare('UPDATE calls SET entry_id = ?, entry_error = NULL WHERE id = ?')
-    .run(entryId, id);
+    .prepare('UPDATE calls SET entry_id = ?, entry_sent_at = ?, entry_error = NULL WHERE id = ?')
+    .run(entryId, now(), id);
 }
 
 /** Say why a Call's Entry could not be sent to Worklog. */
@@ -272,6 +325,17 @@ export function checkJottings(given: unknown): string {
   return given;
 }
 
+/**
+ * Whether the Topics were written after they last went to Worklog. A send
+ * keeps the Topics it was started with, and the Minutes cannot be made while
+ * a send runs, so no Topics are written between the start of a send and the
+ * time it keeps.
+ */
+function changedSinceSent(row: CallRow): boolean {
+  if (row.entry_sent_at === null || row.topics_written_at === null) return false;
+  return row.topics_written_at > row.entry_sent_at;
+}
+
 /** One Call's row, or a sentence that says there is no such Call. */
 function rowOf(store: Store, id: number): CallRow {
   const row = store.prepare('SELECT * FROM calls WHERE id = ?').get(id) as CallRow | undefined;
@@ -293,6 +357,11 @@ function summaryOf(row: CallRow): CallSummary {
     state: row.state,
     startedAt: row.started_at,
     endedAt: row.ended_at,
+    sentToWorklogAt: row.entry_sent_at,
+    event:
+      row.event_name === null || row.event_start === null
+        ? null
+        : { name: row.event_name, start: row.event_start },
   };
 }
 

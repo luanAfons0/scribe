@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<!-- The red line: shown while any Call records, whichever tab records it. -->
+<!-- The red line: shown while any Call records, whichever page records it. -->
 <div id="live" class="live" role="status" hidden>
   <span class="live-dot" aria-hidden="true"></span>
   <span id="live-text">Recording</span>
@@ -23,15 +23,39 @@
   <div id="banner" class="banner" role="alert" hidden></div>
 
   <section id="list-view">
+    <!-- The Event that starts next, drawn by events.js out of what list_events
+         answered: a banner from five minutes before it until it ends, and one
+         line when it is further away. A Notice opens #upcoming. -->
+    <div class="event" id="upcoming" hidden>
+      <div class="event-when"><span id="upcoming-at"></span><small id="upcoming-in"></small></div>
+      <div>
+        <p class="event-name" id="upcoming-name"></p>
+        <p class="event-meta"><span id="upcoming-span"></span>
+          <a id="upcoming-meet" href="#" target="_blank"
+            rel="noopener noreferrer">Open the Meet</a></p>
+      </div>
+      <div class="acts">
+        <button class="act go" id="upcoming-start" type="button">Start a Call</button>
+      </div>
+    </div>
+    <p class="next-event" id="next-event" hidden></p>
+    <!-- A calendar that cannot be read, said once and quietly where the next
+         Event shows. Settings has the sentence of the fault; this line never
+         carries the address (ADR-0006). -->
+    <p class="next-event" id="calendar-unread" hidden>
+      scribe cannot read the calendar now, so an Event may be missing.
+      <a href="#settings">See why in Settings</a>
+    </p>
     <div class="mast">
       <h2 class="section-label">Calls</h2>
-      <!-- Chrome's picker opens: choose the call's tab and tick "Also share
-           tab audio". The mic is asked for next. -->
+      <!-- The App asks what scribe may capture: any screen or window, whose
+           sound is the call's. The mic is asked for next (ADR-0008). -->
       <button class="act go" id="start" type="button">Start a Call</button>
     </div>
     <p class="hint">
-      Start opens Chrome’s picker: choose the call’s tab and tick
-      “Also share tab audio”. Keep this tab open until you press Stop.
+      Start asks what scribe may capture: choose any screen or window. On
+      Windows the sound of the whole machine comes with it. Keep FirstMate
+      running until you press Stop.
     </p>
     <!-- What scribe needs before a Call can record, when it is missing. -->
     <p class="setup-note" id="setup-note" hidden>
@@ -64,7 +88,7 @@
     </div>
 
     <p class="cut-note" id="cut-note" hidden>
-      This Call was Cut: its tab or its Plugin Server went away before Stop.
+      This Call was Cut: its page or its Plugin Server went away before Stop.
       What Whisper heard until then is kept.
     </p>
 
@@ -76,8 +100,6 @@
       </div>
     </div>
     <p class="empty" id="minutes-state" hidden></p>
-    <!-- Why the Call's Entry did not reach Worklog, when it did not. -->
-    <p class="empty fault" id="entry-state" hidden></p>
     <!-- The Minutes as Markdown, drawn by markdown.js: escaped first, always. -->
     <article class="minutes" id="minutes" hidden></article>
     <!-- Edit: the Minutes' Markdown, by hand. The Transcript has no editor. -->
@@ -89,9 +111,31 @@
       </div>
     </form>
 
+    <!-- The Topics the Minutes command wrote, read-only, and the one way they
+         reach Worklog: nothing goes until Send to Worklog is pressed. Shown
+         once a Call has Topics. -->
+    <div id="topics-part" hidden>
+      <div class="mast topics-mast">
+        <h3 class="section-label">Topics for Worklog</h3>
+      </div>
+      <div class="worklog">
+        <p class="topics" id="topics"></p>
+        <div class="worklog-foot">
+          <p class="worklog-state" id="worklog-state"></p>
+          <button class="act go" id="send-worklog" type="button">Send to Worklog</button>
+        </div>
+      </div>
+    </div>
+
     <h3 class="section-label"><label for="call-jottings">Jottings</label></h3>
     <textarea class="jottings" id="call-jottings" spellcheck="true"
       placeholder="Type as the call goes. A line that starts with # is a heading."></textarea>
+    <!-- While the Call records: the Popup's Shortcut, with the keys the
+         Settings view's firstmate bind command line gives. -->
+    <p class="shortcut-hint" id="shortcut-hint" hidden>
+      Write from anywhere with <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>J</kbd>.
+      The Popup shows these Jottings.
+    </p>
 
     <h3 class="section-label">Transcript</h3>
     <p class="empty" id="transcribing" hidden>Whisper is still reading the audio…</p>
@@ -174,11 +218,43 @@
         <input class="field" id="set-worklogPlugin" type="text" spellcheck="false"
           placeholder="worklog">
         <p class="setting-help">
-          The Registry name of the Plugin a Call’s Entry goes to. Empty sends none.
+          The Registry name of the Plugin that Send to Worklog sends the Topics to.
+          Empty turns Send to Worklog off.
         </p>
         <p class="setting-from" id="worklogPlugin-from" hidden></p>
         <p class="fault setting-problem" id="worklogPlugin-ignored" hidden></p>
         <p class="fault setting-problem" id="worklogPlugin-problem" hidden></p>
+      </div>
+      <!-- Drawn by calendar.js. The address is a secret: once saved, it is
+           shown masked and never again (ADR-0006). -->
+      <div class="setting">
+        <label class="section-label" for="set-calendarUrl">Calendar</label>
+        <div id="calendar-empty">
+          <input class="field" id="set-calendarUrl" type="url" spellcheck="false"
+            autocomplete="off"
+            placeholder="https://calendar.google.com/calendar/ical/…/private-…/basic.ics">
+          <p class="setting-help">
+            In Google Calendar, open Settings, choose your calendar, and copy
+            “Secret address in iCal format”. scribe gives a Notice a minute
+            before each Event with a Google Meet link.
+          </p>
+        </div>
+        <div id="calendar-saved" hidden>
+          <div class="secret">
+            <span class="secret-value"
+              aria-label="Saved address, hidden">••••••••</span>
+            <button class="act" type="button" id="calendar-replace">Replace</button>
+            <button class="act danger" type="button" id="calendar-remove">Remove</button>
+          </div>
+          <p class="setting-from">
+            Saved. scribe never shows the address again: anyone with it can read
+            your whole calendar.
+          </p>
+        </div>
+        <p class="setting-from" id="calendarUrl-from" hidden></p>
+        <p class="fault setting-problem" id="calendarUrl-ignored" hidden></p>
+        <p class="setting-help" id="calendar-read" role="status" hidden></p>
+        <p class="fault setting-problem" id="calendar-problem" hidden></p>
       </div>
       <div class="acts">
         <button class="act go" type="submit">Save</button>
@@ -187,6 +263,46 @@
       <!-- The one sentence a bad value is refused with. -->
       <p class="fault" id="settings-refused" role="alert" hidden></p>
     </form>
+    <!-- The diarizer: sherpa-onnx's program and its two models, drawn by
+         downloads.js out of get_settings and get_downloads, and fetched only
+         on a click (ADR-0007). There is nothing to save here: a fetch sets
+         it, and SCRIBE_DIARIZER beats it. -->
+    <div class="setting speakers-setting">
+      <span class="section-label">Diarizer</span>
+      <p class="setting-help">
+        Tells the people in the call’s sound apart after each Call stops. It
+        runs on this machine, and scribe deletes the call’s sound once it is read.
+      </p>
+      <div class="fetch">
+        <div id="diarizer-offer">
+          <p class="setting-help" id="diarizer-offer-text"></p>
+          <div class="fetch-acts">
+            <button class="act" id="fetch-diarizer" type="button">Fetch the diarizer</button>
+            <progress class="fetch-progress" id="diarizer-progress" max="1" value="0"
+              hidden></progress>
+          </div>
+          <p class="fault setting-problem" id="diarizer-fetch-failed" role="alert" hidden></p>
+        </div>
+        <div id="diarizer-done" hidden>
+          <p class="setting-from" id="diarizer-done-text"></p>
+        </div>
+      </div>
+      <p class="fault setting-problem" id="diarizer-ignored" hidden></p>
+      <p class="fault setting-problem" id="diarizer-problem" hidden></p>
+    </div>
+    <!-- The Popup's Shortcut. FirstMate holds it, so scribe has nothing to
+         save here: it shows the command line that binds it, drawn by
+         shortcut.js. -->
+    <div class="setting popup-shortcut">
+      <span class="section-label">Popup Shortcut</span>
+      <p class="setting-help">
+        FirstMate holds the Shortcut. Run this once in a terminal, with the keys you want:
+      </p>
+      <div class="command">
+        <code id="bind-command">firstmate bind Ctrl+Shift+J scribe jot.html</code>
+        <button class="act" id="copy-bind" type="button">Copy</button>
+      </div>
+    </div>
   </section>
 </main>
 <script src="rpc.js"></script>
@@ -194,7 +310,11 @@
 <script src="jottings.js"></script>
 <script src="capture.js"></script>
 <script src="downloads.js"></script>
+<script src="calendar.js"></script>
+<script src="events.js"></script>
 <script src="settings.js"></script>
+<script src="shortcut.js"></script>
+<script src="time.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

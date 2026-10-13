@@ -90,7 +90,7 @@ async function filesIn(directory: string): Promise<readonly string[]> {
 /** A server with a fixture build and the fixture model, and the list of downloads naming them. */
 async function served(
   t: test.TestContext,
-  options: { readonly format?: 'zip' | 'tar.gz'; readonly build?: boolean } = {},
+  options: { readonly format?: 'zip' | 'tar.gz' | 'tar.bz2'; readonly build?: boolean } = {},
 ) {
   const format = options.format ?? 'zip';
   const archive = await fixtureBytes(`whisper-build.${format}`);
@@ -145,7 +145,7 @@ test(
   },
 );
 
-for (const format of ['zip', 'tar.gz'] as const) {
+for (const format of ['zip', 'tar.gz', 'tar.bz2'] as const) {
   test(
     `fetch_whisper fetches a ${format} build, keeps it in the Plugin directory, and sets it`,
     async (t) => {
@@ -319,7 +319,7 @@ test(
   },
 );
 
-for (const format of ['zip', 'tar.gz'] as const) {
+for (const format of ['zip', 'tar.gz', 'tar.bz2'] as const) {
   test(
     `a ${format} build with an entry that leaves its directory is refused, and nothing is kept`,
     async (t) => {

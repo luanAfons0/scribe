@@ -67,6 +67,7 @@ export type Call = {
   readonly state: 'recording' | 'ended' | 'cut';
   readonly startedAt: string;
   readonly endedAt: string | null;
+  readonly sentToWorklogAt: string | null;
   readonly jottings: string;
   readonly transcript: readonly Line[];
   readonly transcribing: boolean;
@@ -76,6 +77,8 @@ export type Call = {
   readonly topics: string | null;
   readonly entryId: number | null;
   readonly entryError: string | null;
+  readonly sendingToWorklog: boolean;
+  readonly topicsChangedSinceSent: boolean;
 };
 
 /** One Call, by id. */

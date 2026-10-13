@@ -2,28 +2,41 @@
  * What scribe is set up with: the settings the operator chooses, and the
  * times and limits that stay in the environment.
  *
- * The operator chooses four: the whisper.cpp executable, its model, the
- * Minutes command and the Worklog Plugin. They are set on the Plugin Page and
+ * The operator chooses six: the whisper.cpp executable, its model, the
+ * Minutes command, the Worklog Plugin, the calendar's secret iCal address and
+ * the diarizer. They are set on the Plugin Page and
  * kept in `settings.json` in the Plugin directory, so they work however the
  * Host was started. The variable of the same name still beats the file, and
  * the file beats the default, which is none. A variable that is set but empty
  * is not set: it decides nothing. One that is not in its form decides nothing
  * either, and the settings tools say it is ignored (ADR-0004).
  *
- * None of the four ends the Plugin Server, and neither does a settings file
+ * None of the six ends the Plugin Server, and neither does a settings file
  * that cannot be read (ADR-0004): a Plugin Server that is up keeps its Plugin
  * Page, and the Page is where they are fixed. What is missing or wrong is one
  * sentence, beside the setting on the Page and as the refusal of whatever
  * needs it. Without whisper.cpp or its model no Call records; without the
  * Minutes command a Call still records and only Make Minutes is refused
- * (ADR-0002); without a Worklog Plugin no Entry is sent and nothing is said.
+ * (ADR-0002); without a Worklog Plugin no Entry is sent and nothing is said;
+ * without the calendar's address there is no Event, and nothing is said;
+ * without the diarizer the call's sound is not told apart, and nothing is said
+ * (ADR-0007).
+ *
+ * The diarizer is a directory, as `fetch_diarizer` keeps it: sherpa-onnx's
+ * `sherpa-onnx-offline-speaker-diarization` (`.exe` on Windows) and its two
+ * models, `segmentation.onnx` and `embedding.onnx`, side by side. It is set
+ * when all three are there.
+ *
+ * The calendar's address is a secret: whoever holds it reads the whole
+ * calendar (ADR-0006). The settings tools say only whether it is set, and no
+ * sentence here carries it, not even one that says it is not in its form.
  *
  * The times stay in the environment alone, each with a default that is right
  * for a person, which a test shortens. One that is not a number still ends the
  * Plugin Server at start with a sentence: nobody sets one by accident.
  */
-import { accessSync, constants, statSync } from 'node:fs';
-import { isAbsolute } from 'node:path';
+import { accessSync, constants, statSync, type Stats } from 'node:fs';
+import { isAbsolute, join } from 'node:path';
 import {
   COMMAND_FORM,
   COMMAND_SHAPE,
@@ -51,6 +64,20 @@ export const WORKLOG_VARIABLE = 'SCRIBE_WORKLOG_PLUGIN';
 export const WORKLOG_WAIT_VARIABLE = 'SCRIBE_WORKLOG_WAIT_MS';
 /** How long a download may send nothing before it is given up. */
 export const FETCH_IDLE_VARIABLE = 'SCRIBE_FETCH_IDLE_MS';
+/** The environment variable that names the diarizer directory. */
+export const DIARIZER_VARIABLE = 'SCRIBE_DIARIZER';
+/** The environment variable that holds the calendar's secret iCal address. */
+export const CALENDAR_VARIABLE = 'SCRIBE_CALENDAR_URL';
+/** How often scribe reads the calendar again. */
+export const CALENDAR_READ_VARIABLE = 'SCRIBE_CALENDAR_READ_MS';
+/** How long before an Event its Notice goes. */
+export const NOTICE_LEAD_VARIABLE = 'SCRIBE_NOTICE_LEAD_MS';
+
+/** An Event added today gets its Notice if the calendar is read this often. */
+const CALENDAR_READ_MS = 5 * 60_000;
+
+/** A minute is enough to open the call, and not so long that it is forgotten. */
+const NOTICE_LEAD_MS = 60_000;
 
 /** A download that sends nothing for a minute has stalled, not slowed. */
 const FETCH_IDLE_MS = 60_000;
@@ -74,6 +101,10 @@ export type Settings = {
   readonly worklogWaitMs: number;
   /** How long a download may send nothing before it is given up. */
   readonly fetchIdleMs: number;
+  /** How often scribe reads the calendar again. */
+  readonly calendarReadMs: number;
+  /** How long before an Event its Notice goes. */
+  readonly noticeLeadMs: number;
 };
 
 /** Read the times, or throw a sentence that names the one that is wrong. */
@@ -91,14 +122,30 @@ export function readSettings(env: NodeJS.ProcessEnv = process.env): Settings {
       WORKLOG_WAIT_MS,
     ),
     fetchIdleMs: milliseconds(FETCH_IDLE_VARIABLE, env[FETCH_IDLE_VARIABLE], FETCH_IDLE_MS),
+    calendarReadMs: milliseconds(
+      CALENDAR_READ_VARIABLE,
+      env[CALENDAR_READ_VARIABLE],
+      CALENDAR_READ_MS,
+    ),
+    noticeLeadMs: milliseconds(NOTICE_LEAD_VARIABLE, env[NOTICE_LEAD_VARIABLE], NOTICE_LEAD_MS),
   };
 }
 
 /** The settings the operator chooses, by the name the tools and the file give each. */
-export const CHOSEN = ['whisper', 'whisperModel', 'minutesCommand', 'worklogPlugin'] as const;
+export const CHOSEN = [
+  'whisper',
+  'whisperModel',
+  'minutesCommand',
+  'worklogPlugin',
+  'calendarUrl',
+  'diarizer',
+] as const;
 
 /** The name of one setting the operator chooses. */
 export type Chosen = (typeof CHOSEN)[number];
+
+/** The settings whose value the settings tools may show: all but the secret one. */
+type Shown = Exclude<Chosen, 'calendarUrl'>;
 
 /** Who decides a setting: the environment, the settings file, or neither. */
 export type DecidedBy = 'environment' | 'file' | 'default';
@@ -119,11 +166,43 @@ export type SettingView = {
   readonly ignored: string | null;
 };
 
+/**
+ * The calendar's secret address, as the settings tools tell it: whether it is
+ * set, and never what it is (ADR-0006).
+ */
+export type SecretView = Omit<SettingView, 'value' | 'saved'> & {
+  /** Whether scribe has an address to read. */
+  readonly set: boolean;
+  /** Whether the settings file holds one, whether or not the environment beats it. */
+  readonly saved: boolean;
+};
+
 /** Every setting the operator chooses, as the settings tools tell them. */
-export type SettingsView = { readonly [name in Chosen]: SettingView };
+export type SettingsView = { readonly [name in Shown]: SettingView } & {
+  readonly calendarUrl: SecretView;
+};
 
 /** whisper.cpp, ready to run: the executable and the model it reads. */
 export type Whisper = { readonly program: string; readonly model: string };
+
+/** The diarizer, ready to run: sherpa-onnx's program and the two models it reads. */
+export type Diarizer = {
+  readonly program: string;
+  readonly segmentation: string;
+  readonly embedding: string;
+};
+
+/** The program in a diarizer directory, as this system names it. */
+export const DIARIZER_PROGRAM =
+  process.platform === 'win32'
+    ? 'sherpa-onnx-offline-speaker-diarization.exe'
+    : 'sherpa-onnx-offline-speaker-diarization';
+
+/** The segmentation model in a diarizer directory. */
+export const SEGMENTATION_MODEL = 'segmentation.onnx';
+
+/** The embedding model in a diarizer directory. */
+export const EMBEDDING_MODEL = 'embedding.onnx';
 
 /** The settings the operator chooses, in one running Plugin Server. */
 export type Choices = {
@@ -135,6 +214,8 @@ export type Choices = {
   minutesCommandSet(): boolean;
   /** The Registry name of the Worklog Plugin, or null when no Entry is sent. */
   worklogPlugin(): string | null;
+  /** The calendar's secret iCal address, or null when there is no Event. Never shown. */
+  calendarUrl(): string | null;
   /** Every setting, as the settings tools tell them. */
   view(): SettingsView;
   /** Keep the given settings in the file, or refuse every one with a sentence. */
@@ -162,6 +243,8 @@ type Spec = {
   readonly shape: string;
   /** Whether its variable holds JSON, as the Minutes command does, or plain text. */
   readonly json: boolean;
+  /** Whether its value is a secret, which no sentence may carry. */
+  readonly secret: boolean;
   /** The value in its form, or null when it is not in it. */
   readonly form: (value: unknown) => Value | null;
   /** What it needs to be used, read each time, which throws the sentence when it is not met. */
@@ -172,11 +255,12 @@ type Spec = {
 const PLUGIN_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /**
- * The four settings, as data. The form is all `update_settings` checks
- * (ADR-0004): an absolute path for whisper.cpp and its model, a program and its
- * arguments for the Minutes command (ADR-0003), a Registry name for the
- * Worklog Plugin. Whether a path leads to a file is the check, read each time
- * and shown beside the setting as its problem.
+ * The six settings, as data. The form is all `update_settings` checks
+ * (ADR-0004): an absolute path for whisper.cpp, its model and the diarizer, a
+ * program and its arguments for the Minutes command (ADR-0003), a Registry
+ * name for the Worklog Plugin, and a web address for the calendar. Whether a
+ * path leads to a file is the check, read each time and shown beside the
+ * setting as its problem.
  */
 const SPECS: { readonly [name in Chosen]: Spec } = {
   whisper: {
@@ -184,6 +268,7 @@ const SPECS: { readonly [name in Chosen]: Spec } = {
     label: 'the whisper.cpp executable',
     shape: 'the absolute path of the whisper.cpp executable',
     json: false,
+    secret: false,
     form: absolutePath,
     check: executable,
   },
@@ -192,6 +277,7 @@ const SPECS: { readonly [name in Chosen]: Spec } = {
     label: 'the whisper.cpp model',
     shape: 'the absolute path of the whisper.cpp model',
     json: false,
+    secret: false,
     form: absolutePath,
     check: existingFile,
   },
@@ -200,6 +286,7 @@ const SPECS: { readonly [name in Chosen]: Spec } = {
     label: 'the Minutes command',
     shape: COMMAND_SHAPE,
     json: true,
+    secret: false,
     form: (value) => {
       const command = commandOf(value);
       return command === null ? null : toArray(command);
@@ -211,8 +298,28 @@ const SPECS: { readonly [name in Chosen]: Spec } = {
     label: 'the Worklog Plugin',
     shape: 'the Registry name of the Worklog Plugin, such as "worklog"',
     json: false,
+    secret: false,
     form: (value) => (typeof value === 'string' && PLUGIN_NAME.test(value) ? value : null),
     check: null,
+  },
+  calendarUrl: {
+    variable: CALENDAR_VARIABLE,
+    label: "the calendar's secret address",
+    shape: 'the "Secret address in iCal format" Google Calendar gives, which starts with https://',
+    json: false,
+    secret: true,
+    form: webAddress,
+    check: null,
+  },
+  diarizer: {
+    variable: DIARIZER_VARIABLE,
+    label: 'the diarizer',
+    shape: 'the absolute path of the diarizer directory',
+    json: false,
+    secret: false,
+    form: absolutePath,
+    // No diarizer is no problem: the call's sound stays Outros (ADR-0007).
+    check: (spec, setting) => (isSet(setting) ? diarizerIn(spec, setting) : null),
   },
 };
 
@@ -223,6 +330,8 @@ function each<T>(make: (name: Chosen) => T): { readonly [name in Chosen]: T } {
     whisperModel: make('whisperModel'),
     minutesCommand: make('minutesCommand'),
     worklogPlugin: make('worklogPlugin'),
+    calendarUrl: make('calendarUrl'),
+    diarizer: make('diarizer'),
   };
 }
 
@@ -240,10 +349,11 @@ function fromVariable(spec: Spec, env: NodeJS.ProcessEnv): FromVariable {
   if (text === '') return { value: null, ignored: null };
   const value = spec.form(spec.json ? jsonOrText(text) : text);
   if (value !== null) return { value, ignored: null };
+  const is = spec.secret ? `${spec.variable} is set` : `${spec.variable} is ${text}`;
   return {
     value: null,
     ignored:
-      `${spec.variable} is ${text}, which is not ${spec.shape}, so scribe ignores it; ` +
+      `${is}, which is not ${spec.shape}, so scribe ignores it; ` +
       'remove it from where the Host is started, such as the systemd drop-in of scribe 1.x, ' +
       `and set ${spec.label} on the Plugin Page.`,
   };
@@ -260,7 +370,8 @@ function jsonOrText(text: string): unknown {
 
 /** The sentence that says a value is not in its setting's form. */
 function notInForm(spec: Spec, named: string, value: unknown): string {
-  return `${named} is ${JSON.stringify(value)}; set it to ${spec.shape}, or to null for none.`;
+  const is = spec.secret ? `${named} is not in its form` : `${named} is ${JSON.stringify(value)}`;
+  return `${is}; set it to ${spec.shape}, or to null for none.`;
 }
 
 /**
@@ -318,18 +429,20 @@ export function openChoices(
 
     minutesCommand: () => foundCommand(SPECS.minutesCommand, given('minutesCommand')),
 
-    minutesCommandSet: () => {
-      const setting = given('minutesCommand');
-      return setting.value !== null || setting.unread !== null;
-    },
+    minutesCommandSet: () => isSet(given('minutesCommand')),
 
     worklogPlugin: () => {
       const setting = given('worklogPlugin');
       return typeof setting.value === 'string' ? setting.value : null;
     },
 
-    view: () =>
-      each((name) => {
+    calendarUrl: () => {
+      const setting = given('calendarUrl');
+      return typeof setting.value === 'string' ? setting.value : null;
+    },
+
+    view: () => {
+      const all = each((name) => {
         const setting = given(name);
         return {
           value: setting.value,
@@ -339,7 +452,13 @@ export function openChoices(
           problem: problemOf(name),
           ignored: environment[name].ignored,
         };
-      }),
+      });
+      const { value, saved: held, ...calendar } = all.calendarUrl;
+      return {
+        ...all,
+        calendarUrl: { ...calendar, set: value !== null, saved: held !== null },
+      };
+    },
 
     update: (changes) => {
       const known: readonly string[] = CHOSEN;
@@ -370,11 +489,28 @@ export function openChoices(
   };
 }
 
+/** Whether a setting is set at all, in its form or not. */
+function isSet(setting: Given): boolean {
+  return setting.value !== null || setting.unread !== null;
+}
+
 /** An absolute path, trimmed, or null when the value is not one. */
 function absolutePath(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const path = value.trim();
   return path !== '' && isAbsolute(path) ? path : null;
+}
+
+/** An http or https address, trimmed, or null when the value is not one. */
+function webAddress(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const address = value.trim();
+  try {
+    const url = new URL(address);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? address : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Where a setting is fixed: where the Host is started, or on the Plugin Page. */
@@ -415,6 +551,53 @@ function existingFile(spec: Spec, setting: Given): string {
     );
   }
   return path;
+}
+
+/**
+ * The diarizer in the directory a setting names, or a sentence that says
+ * Speakers are not told apart and names what is missing.
+ */
+function diarizerIn(spec: Spec, setting: Given): Diarizer {
+  const refused = (why: string): Error =>
+    badInput(`The call's sound is not told apart into Speakers: ${why}`);
+  if (setting.unread !== null) throw refused(setting.unread);
+  const directory = String(setting.value);
+  const fix =
+    setting.from === 'environment'
+      ? `change ${spec.variable} where the Host is started`
+      : 'fetch the diarizer again in Settings';
+  if (!(statOrNull(directory)?.isDirectory() ?? false)) {
+    throw refused(`${named(spec, setting)} is ${directory}, which is not a directory; ${fix}.`);
+  }
+  const missing = [DIARIZER_PROGRAM, SEGMENTATION_MODEL, EMBEDDING_MODEL].filter(
+    (name) => !(statOrNull(join(directory, name))?.isFile() ?? false),
+  );
+  if (missing.length > 0) {
+    throw refused(
+      `${named(spec, setting)} is ${directory}, which holds no ${missing.join(' and no ')}; ` +
+        `${fix}.`,
+    );
+  }
+  const program = join(directory, DIARIZER_PROGRAM);
+  try {
+    accessSync(program, constants.X_OK);
+  } catch {
+    throw refused(`${program} may not be run; ${fix}.`);
+  }
+  return {
+    program,
+    segmentation: join(directory, SEGMENTATION_MODEL),
+    embedding: join(directory, EMBEDDING_MODEL),
+  };
+}
+
+/** What is at a path, or null when nothing is. */
+function statOrNull(path: string): Stats | null {
+  try {
+    return statSync(path);
+  } catch {
+    return null;
+  }
 }
 
 /** The path of an existing file a setting names, which may be run. */

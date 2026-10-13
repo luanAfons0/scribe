@@ -1,4 +1,4 @@
-/* The Settings view: the four settings the operator chooses, as get_settings
+/* The Settings view: the settings the operator chooses, as get_settings
    tells them, and the form that changes them with update_settings. scribe is
    set up here, once, and works however the Host was started (ADR-0004).
 
@@ -10,7 +10,8 @@
    missing or wrong is the Plugin Server's own sentence, shown beside the
    setting it names.
 
-   Under whisper.cpp and its model, downloads.js offers to fetch them.
+   Under whisper.cpp and its model, downloads.js offers to fetch them. The
+   calendar's secret address is calendar.js's, as it is never shown back.
 
    app.js decides when the view is shown, and calls showSettings() and
    recordingProblem(). */
@@ -59,6 +60,7 @@ function drawSettings(settings, fill) {
     problem.hidden = setting.problem === null;
     problem.textContent = setting.problem || '';
   }
+  drawCalendar(settings.calendarUrl);
 }
 
 /** Show the Settings view, with what the Plugin Server holds now, and what it can fetch. */
@@ -74,6 +76,12 @@ async function recordingProblem() {
   return settings.whisper.problem || settings.whisperModel.problem || null;
 }
 
+/** Whether a Worklog Plugin is set, so the Topics have somewhere to go. */
+async function worklogPluginSet() {
+  const settings = (await call('get_settings')).settings;
+  return settings.worklogPlugin.value !== null;
+}
+
 document.getElementById('settings-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const saved = document.getElementById('settings-saved');
@@ -83,10 +91,13 @@ document.getElementById('settings-form').addEventListener('submit', async (event
   for (const name of SETTING_NAMES) {
     given[name] = fieldValue(name, document.getElementById('set-' + name).value);
   }
+  Object.assign(given, calendarGiven());
   try {
+    const before = new Date().toISOString();
     drawSettings((await call('update_settings', given)).settings, true);
     refused.hidden = true;
     saved.hidden = false;
+    if ('calendarUrl' in given) followCalendarRead(before);
   } catch (fault) {
     // Nothing was kept: the fields stay as typed, so the one that is wrong
     // can be put right.

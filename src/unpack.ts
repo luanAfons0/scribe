@@ -1,9 +1,10 @@
 /**
  * Unpack a whisper.cpp build: a zip on Windows, a tar.gz on Linux, as
- * whisper.cpp publishes them (ADR-0005).
+ * whisper.cpp publishes them (ADR-0005). sherpa-onnx publishes a tar.bz2 for
+ * every system (ADR-0007).
  *
- * Node reads neither, and scribe takes no dependency, so this is a small
- * reader of its own over `node:zlib`: the same code on every system, with no
+ * Node reads none of them, and scribe takes no dependency, so this is a small
+ * reader of its own over `node:zlib` and `bzip2.ts`: the same code on every system, with no
  * program of the system's to find, and nothing in an archive is run. It reads
  * what whisper.cpp's archives hold, and refuses the rest with a sentence: a
  * zip that is encrypted, split or ZIP64, an entry of a kind it does not know.
@@ -17,55 +18,117 @@
  * is no entry to unpack, and is passed over. A link is written as a copy of
  * the file it names, because Windows lets few accounts make one, and
  * whisper.cpp's Linux build names its libraries through links.
+ *
+ * A sherpa-onnx build holds every program of sherpa-onnx, and the diarizer
+ * needs one of them (ADR-0007): the Windows archive unpacks to 1.3 GB for
+ * 17 MB kept. So the caller may name the members to keep, each with the path
+ * it is written at. The whole archive is still read and checked, and only
+ * those members are written. A member named and not in the archive is
+ * refused.
+ *
+ * So a machine of 8 GB can fetch it, a tar.bz2 is never held whole: it is
+ * read from its file a chunk at a time, bzip2.ts gives it back a block at a
+ * time, and the tar reader takes the bytes of a member that is kept, across
+ * blocks, and passes over the rest as they go by. Only the members kept are
+ * held, and they are written once the last block and the stream's CRC are
+ * checked, so nothing of a damaged archive is written.
  */
-import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  closeSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join, posix } from 'node:path';
 import { gunzipSync, inflateRawSync } from 'node:zlib';
+import { bunzip2 } from './bzip2.ts';
 import type { Format } from './downloads.ts';
 
-/** One entry of an archive, read out of it. */
+/** How much of a tar.bz2 is read from its file at once. */
+const CHUNK = 1 << 20;
+
+/** One entry of an archive, read out of it: a file's data is null when it is passed over. */
 type Entry =
-  | { readonly kind: 'file'; readonly path: string; readonly mode: number; readonly data: Buffer }
+  | {
+      readonly kind: 'file';
+      readonly path: string;
+      readonly mode: number;
+      readonly data: Buffer | null;
+    }
   | { readonly kind: 'directory'; readonly path: string }
   | { readonly kind: 'link'; readonly path: string; readonly target: string };
 
-/** Unpack an archive of this format into `into`, which must exist and be empty. */
-export function unpack(archive: Buffer, format: Format, into: string): void {
-  const entries = format === 'zip' ? readZip(archive) : readTar(gunzipSync(archive));
+/**
+ * Unpack the archive at this path, in this format, into `into`, which must
+ * exist and be empty. With `keep`, only its members are written, each at the
+ * path it maps to.
+ */
+export function unpack(
+  archive: string,
+  format: Format,
+  into: string,
+  keep?: ReadonlyMap<string, string>,
+): void {
+  const wanted = (path: string): boolean => keep === undefined || keep.has(path);
+  let entries: readonly Entry[];
+  if (format === 'zip') entries = readZip(readFileSync(archive));
+  else if (format === 'tar.gz') entries = readTar([gunzipSync(readFileSync(archive))], wanted);
+  else {
+    const chunks = fileChunks(archive);
+    try {
+      entries = readTar(bunzip2(chunks), wanted);
+    } finally {
+      // Closes the file, also when the archive is refused halfway.
+      chunks.return(undefined);
+    }
+  }
   const files = new Map<string, Entry>();
   for (const entry of entries) {
     if (files.has(entry.path)) throw new Error(`${entry.path} is in the archive twice.`);
     files.set(entry.path, entry);
   }
 
+  for (const member of keep?.keys() ?? []) {
+    if (!files.has(member)) throw new Error(`${member} is not in the archive.`);
+  }
+
   for (const entry of entries) {
-    const at = join(into, ...entry.path.split('/'));
+    const placed = keep === undefined ? entry.path : keep.get(entry.path);
+    if (placed === undefined) continue;
+    const at = join(into, ...safe(placed).split('/'));
     if (entry.kind === 'directory') {
       mkdirSync(at, { recursive: true });
       continue;
     }
-    const file = entry.kind === 'file' ? entry : followed(entry, files);
+    const file = followed(entry, files);
     mkdirSync(dirname(at), { recursive: true });
     writeFileSync(at, file.data);
     chmodSync(at, file.mode & 0o777 || 0o644);
   }
 }
 
-/** The file a link names, through any links between, or a refusal. */
+/** The data and mode of a file, or of the file a link names through any links between. */
 function followed(
-  link: Extract<Entry, { kind: 'link' }>,
+  entry: Exclude<Entry, { kind: 'directory' }>,
   files: ReadonlyMap<string, Entry>,
-): Extract<Entry, { kind: 'file' }> {
-  let at: Entry = link;
+): { readonly data: Buffer; readonly mode: number } {
+  let at: Entry = entry;
   for (let hops = 0; hops < 16; hops += 1) {
-    if (at.kind === 'file') return at;
+    if (at.kind === 'file') {
+      if (at.data !== null) return { data: at.data, mode: at.mode };
+      // A link may name a file that was passed over, as it was not kept.
+      throw new Error(`${entry.path} names ${at.path}, which is not kept.`);
+    }
     if (at.kind === 'directory') break;
     const target = posix.normalize(posix.join(posix.dirname(at.path), at.target));
-    const next = files.get(safe(target, link.path));
+    const next = files.get(safe(target, entry.path));
     if (next === undefined) break;
     at = next;
   }
-  throw new Error(`the link ${link.path} names no file inside the archive.`);
+  throw new Error(`the link ${entry.path} names no file inside the archive.`);
 }
 
 /** A name as a relative path with `/`, before it is checked. */
@@ -163,66 +226,83 @@ function inflated(raw: Buffer, size: number, name: string): Buffer {
   }
 }
 
-/** The entries of a tar, in the ustar and GNU forms, with the long names of both. */
-function readTar(tar: Buffer): readonly Entry[] {
+/**
+ * The entries of a tar, in the ustar and GNU forms, with the long names of
+ * both, read out of chunks that come one at a time. The data of a file is held
+ * only when `wanted` takes its path; the rest is passed over as it goes by.
+ * Every chunk is read, also after the end of the tar, so every check the
+ * chunks carry runs.
+ */
+function readTar(chunks: Iterable<Buffer>, wanted: (path: string) => boolean): readonly Entry[] {
+  const bytes = byteReader(chunks);
   const entries: Entry[] = [];
-  const text = (from: number, length: number): string => {
-    const field = tar.subarray(from, from + length);
-    const zero = field.indexOf(0);
-    return field.toString('utf8', 0, zero < 0 ? field.length : zero);
-  };
-  /** An octal field, or NaN when it holds anything but octal digits. */
-  const octal = (from: number, length: number): number => {
-    const digits = text(from, length).trim();
-    return /^[0-7]*$/.test(digits) ? Number.parseInt(digits || '0', 8) : Number.NaN;
-  };
 
   let longName: string | null = null;
   let longLink: string | null = null;
-  for (let next = 0; next + 512 <= tar.length; ) {
-    const header = next;
-    if (tar.subarray(header, header + 512).every((byte) => byte === 0)) break;
-    const type = String.fromCharCode(tar[header + 156] ?? 0);
-    const size = octal(header + 124, 12);
-    const named = (): string => longName ?? text(header, 100);
+  for (;;) {
+    const header = bytes.take(512);
+    if (header.length < 512 || header.every((byte) => byte === 0)) break;
+    const text = (from: number, length: number): string => {
+      const field = header.subarray(from, from + length);
+      const zero = field.indexOf(0);
+      return field.toString('utf8', 0, zero < 0 ? field.length : zero);
+    };
+    /** An octal field, or NaN when it holds anything but octal digits. */
+    const octal = (from: number, length: number): number => {
+      const digits = text(from, length).trim();
+      return /^[0-7]*$/.test(digits) ? Number.parseInt(digits || '0', 8) : Number.NaN;
+    };
+    const type = String.fromCharCode(header[156] ?? 0);
+    const size = octal(124, 12);
+    const named = (): string => longName ?? text(0, 100);
     if (!Number.isSafeInteger(size)) {
       throw new Error(`${named()} has a size that is not a number.`);
     }
-    if (header + 512 + size > tar.length) {
-      throw new Error(`${named()} runs past the end of the archive.`);
-    }
-    const data = tar.subarray(header + 512, header + 512 + size);
-    next += 512 + Math.ceil(size / 512) * 512;
+    const padding = (512 - (size % 512)) % 512;
+    const short = (): Error => new Error(`${named()} runs past the end of the archive.`);
+    /** The data of this entry, held. */
+    const held = (): Buffer => {
+      const data = bytes.take(size);
+      if (data.length < size) throw short();
+      bytes.pass(padding);
+      return data;
+    };
 
     if (type === 'L' || type === 'K') {
-      const value = data.toString('utf8').replace(/\0+$/, '');
+      const value = held().toString('utf8').replace(/\0+$/, '');
       if (type === 'L') longName = value;
       else longLink = value;
       continue;
     }
     if (type === 'x') {
-      for (const record of data.toString('utf8').split('\n')) {
+      for (const record of held().toString('utf8').split('\n')) {
         const found = /^\d+ (path|linkpath)=(.*)$/.exec(record);
         if (found?.[1] === 'path') longName = found[2] ?? null;
         if (found?.[1] === 'linkpath') longLink = found[2] ?? null;
       }
       continue;
     }
-    if (type === 'g') continue;
 
     // Only the POSIX form keeps a prefix of the name at 345; the GNU form
     // keeps other fields there.
-    const prefix = text(header + 257, 6) === 'ustar' ? text(header + 345, 155) : '';
-    const short = text(header, 100);
-    const name = longName ?? (prefix === '' ? short : `${prefix}/${short}`);
-    const target = longLink ?? text(header + 157, 100);
+    const prefix = text(257, 6) === 'ustar' ? text(345, 155) : '';
+    const name = longName ?? (prefix === '' ? text(0, 100) : `${prefix}/${text(0, 100)}`);
+    const target = longLink ?? text(157, 100);
+    const file = type === '0' || type === '\0' || type === '7';
+    const path = type === 'g' || (type === '5' && isTop(name)) ? null : safe(name);
+    let data: Buffer | null = null;
+    if (file && path !== null && wanted(path)) {
+      data = held();
+    } else {
+      if (bytes.pass(size) < size) throw short();
+      bytes.pass(padding);
+    }
     longName = null;
     longLink = null;
 
-    if (type === '5' && isTop(name)) continue;
-    const path = safe(name);
-    if (type === '0' || type === '\0' || type === '7') {
-      entries.push({ kind: 'file', path, mode: octal(header + 100, 8), data: Buffer.from(data) });
+    if (path === null) continue;
+    if (file) {
+      entries.push({ kind: 'file', path, mode: octal(100, 8), data });
     } else if (type === '5') {
       entries.push({ kind: 'directory', path });
     } else if (type === '2') {
@@ -234,5 +314,74 @@ function readTar(tar: Buffer): readonly Entry[] {
       throw new Error(`${name} is an entry of type ${type}, which scribe does not unpack.`);
     }
   }
+  bytes.drain();
   return entries;
+}
+
+/** Bytes read in order out of chunks that come one at a time, and are let go once read. */
+type ByteReader = {
+  /** The next `count` bytes, or fewer where the bytes end. */
+  readonly take: (count: number) => Buffer;
+  /** Pass over the next `count` bytes, and say how many there were. */
+  readonly pass: (count: number) => number;
+  /** Read every chunk that is left. */
+  readonly drain: () => void;
+};
+
+/** A reader of these chunks, from the first byte. */
+function byteReader(chunks: Iterable<Buffer>): ByteReader {
+  const source = chunks[Symbol.iterator]();
+  let chunk: Buffer = Buffer.alloc(0);
+  let at = 0;
+  /** Whether a byte is left, after the next chunk is asked for if it must be. */
+  const more = (): boolean => {
+    while (at >= chunk.length) {
+      const next = source.next();
+      if (next.done === true) return false;
+      chunk = next.value;
+      at = 0;
+    }
+    return true;
+  };
+  return {
+    take: (count) => {
+      const pieces: Buffer[] = [];
+      let got = 0;
+      while (got < count && more()) {
+        const piece = chunk.subarray(at, at + count - got);
+        pieces.push(piece);
+        got += piece.length;
+        at += piece.length;
+      }
+      return pieces.length === 1 ? (pieces[0] as Buffer) : Buffer.concat(pieces, got);
+    },
+    pass: (count) => {
+      let passed = 0;
+      while (passed < count && more()) {
+        const step = Math.min(count - passed, chunk.length - at);
+        at += step;
+        passed += step;
+      }
+      return passed;
+    },
+    drain: () => {
+      while (more()) at = chunk.length;
+    },
+  };
+}
+
+/** A file read a chunk at a time; it is closed when the reading ends or is given up. */
+function* fileChunks(path: string): Generator<Buffer, void, undefined> {
+  const descriptor = openSync(path, 'r');
+  try {
+    for (;;) {
+      // A new buffer each time: the one before may still be read.
+      const chunk = Buffer.allocUnsafe(CHUNK);
+      const read = readSync(descriptor, chunk, 0, CHUNK, null);
+      if (read === 0) return;
+      yield chunk.subarray(0, read);
+    }
+  } finally {
+    closeSync(descriptor);
+  }
 }

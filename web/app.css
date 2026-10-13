@@ -21,6 +21,7 @@
 
   --accent: #1f4f7a;
   --accent-ink: #ffffff;
+  --accent-soft: #e3ecf4;
   --live: #c62828;
   --live-soft: #fbe3e1;
   --cut: #9a6b00;
@@ -46,6 +47,7 @@
 
     --accent: #8dbbe2;
     --accent-ink: #0b1826;
+    --accent-soft: #15283a;
     --live: #ff6b5e;
     --live-soft: rgba(255, 107, 94, 0.14);
     --cut: #e0b04a;
@@ -145,10 +147,54 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* The word Event, where a Call's title is the Event's name. */
+.from-event { color: var(--accent); }
+
 .empty, .hint { color: var(--faint); }
 .hint { margin: 0 0 16px; font-size: 13px; }
 
 a.brand { color: inherit; text-decoration: none; }
+
+/* The Event that starts next. Blue, the accent's job: red stays for
+   recording, and amber for what is Cut. */
+.event {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 4px 14px;
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  scroll-margin-top: 52px;
+}
+
+.event-when {
+  font: 600 22px/1 var(--display);
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.event-when small {
+  display: block;
+  margin-top: 3px;
+  font: 600 11px/1 var(--display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.event-name { margin: 0; font-weight: 600; }
+.event-meta { margin: 0; color: var(--muted); font-size: 13px; }
+.event-meta a { color: var(--accent); font-weight: 600; text-underline-offset: 3px; }
+.next-event { margin: -6px 0 18px; font-size: 13px; color: var(--muted); }
+#calendar-unread { color: var(--faint); }
+#calendar-unread a { color: var(--accent); font-weight: 600; text-underline-offset: 3px; }
+
+@media (max-width: 600px) {
+  .event { grid-template-columns: auto 1fr; }
+  .event .acts { grid-column: 1 / -1; }
+}
 
 /* The red line. Red is kept for this one job on the whole page. */
 .live {
@@ -377,9 +423,94 @@ h3.section-label { margin-top: 24px; }
 .settings .acts { align-items: center; }
 .saved { color: var(--muted); }
 
+/* Under the Jottings of the Call that records: the Popup's Shortcut. */
+.shortcut-hint { margin: 6px 0 0; font-size: 13px; color: var(--faint); }
+
+/* A key, as the Popup's foot, the Call and the Settings view name one. */
+kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+  font: 12px/1.4 var(--mono);
+}
+
+/* Speakers: an offer to fetch, after the settings to save, with nothing to save. */
+.speakers-setting { margin-top: 24px; }
+.speakers-setting > .setting-help { margin-top: 0; }
+.speakers-setting + .popup-shortcut { margin-top: 0; }
+
+/* The Popup Shortcut: a command line to copy, after the settings to save. */
+.popup-shortcut { margin-top: 24px; }
+.popup-shortcut .setting-help { margin-top: 0; }
+.command { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+
+.command code {
+  flex: 1;
+  min-width: 14em;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  font: 14px/1.4 var(--mono);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
 /* An offer to fetch whisper.cpp or a model, under its setting. */
 .fetch { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 .fetch .setting-help { margin-top: 0; }
 .fetch-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+/* The calendar's saved address, masked: it is never shown back (ADR-0006). */
+.secret { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.secret-value {
+  flex: 1;
+  min-width: 12em;
+  padding: 6px 10px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font: 14px/1.4 var(--mono);
+  letter-spacing: 0.1em;
+}
 .fetch-choice { display: inline-block; width: auto; }
 .fetch-progress { flex: 1 1 160px; height: 8px; accent-color: var(--accent); }
+
+/* The Topics, read-only, and the one way they reach Worklog. */
+.topics-mast { margin-top: 28px; }
+.topics-mast .section-label { margin: 0; }
+
+.worklog {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.topics {
+  margin: 0;
+  padding: 12px 18px;
+  max-width: 75ch;
+  color: var(--ink);
+  white-space: pre-line;
+}
+
+.worklog-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: var(--canvas);
+}
+
+.worklog-state { margin: 0; font-size: 13px; color: var(--muted); }
+.worklog-state.changed { color: var(--cut); font-weight: 600; }
+.worklog-state.fault { color: var(--live); }
+.worklog-state a { color: var(--accent); font-weight: 600; }
+
+.sent-mark { color: var(--muted); }
