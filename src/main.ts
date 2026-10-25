@@ -9,6 +9,7 @@
  * It says nothing on the way up. A Plugin Server that started is what the
  * Index Page shows; the journal is for what went wrong.
  */
+import { constants } from 'node:os';
 import { receive } from './bus.ts';
 import { calendarFor } from './calendar.ts';
 import { readDownloads } from './downloads.ts';
@@ -65,12 +66,15 @@ serve(
 // No whisper.cpp and no Minutes command outlives the Plugin Server (ADR-0003).
 // The Host closes stdin to stop it, and nobody is left to answer then, so it
 // ends what it started and goes at once. A signal does the same, and then
-// ends it as the signal would have.
+// ends it as the signal would have. Windows gives SIGHUP when the console
+// closes but cannot send it again, so there it exits with the code a shell
+// gives that signal.
 process.on('exit', endEveryTree);
 process.stdin.on('end', () => process.exit(0));
 for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) {
   process.once(signal, () => {
     endEveryTree();
+    if (process.platform === 'win32') process.exit(128 + constants.signals[signal]);
     process.kill(process.pid, signal);
   });
 }

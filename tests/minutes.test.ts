@@ -54,6 +54,21 @@ test('a stopped Call gets its Minutes and a proposed title at once', async (t) =
   assert.ok(!call.minutes?.includes('TITLE'), call.minutes ?? '');
 });
 
+test('Minutes printed in a code fence with CRLF lines lose the fence and the CR', async (t) => {
+  const plugin = await startedAndShaken(t, {
+    env: { SCRIBE_MINUTES_COMMAND: COMMAND, SCRIBE_TEST_MINUTES_CRLF: '1' },
+  });
+  const id = await stoppedCall(plugin);
+
+  const call = await until(plugin, id, (seen) => seen.minutesState === 'made');
+
+  assert.equal(call.title, 'Prazo da entrega');
+  assert.ok(call.minutes?.startsWith('## Prazo\n'), call.minutes ?? '');
+  assert.ok(call.minutes?.endsWith('## Próximos passos\n- Nenhuma.'), call.minutes ?? '');
+  assert.ok(!call.minutes?.includes('\r'), call.minutes ?? '');
+  assert.equal(call.topics, '- Prazo da entrega\n\nCombinamos a entrega para sexta.');
+});
+
 test('the prompt holds the Jottings, the Transcript and the rules', async (t) => {
   const log = join(await makeDirectory(t), 'prompt.txt');
   const plugin = await startedAndShaken(t, {
