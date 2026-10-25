@@ -82,7 +82,12 @@ export async function makeMinutes(
 
 /** The title, the Minutes and the Topics out of what the command printed. */
 function readAnswer(stdout: string): Made {
-  let text = stdout.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+  // A command on Windows may end its lines with CRLF: read them as LF, so the
+  // fence comes off and the Minutes are kept as every other line is.
+  let text = stdout
+    .replace(/\r\n/g, '\n')
+    .replace(/<think>[\s\S]*?<\/think>/g, '')
+    .trim();
   // The Topics come out first, wherever the model put them: inside a code
   // fence or outside it, the Minutes must never carry them.
   const block = /<topics>([\s\S]*?)<\/topics>/i.exec(text);

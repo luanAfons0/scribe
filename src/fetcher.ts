@@ -13,8 +13,10 @@
  * What is there already, the build of the same release fetched before, is set
  * aside and removed only once the new one is in place and its setting saved.
  * A rename or a save that fails puts it back, so the build in use is never
- * lost. A Plugin Server that stops halfway leaves `.part` files, which the
- * next start removes, and a build set aside, which it puts back or removes.
+ * lost. A rename that Windows refuses while the path is held is tried again a
+ * few times first. A Plugin Server that stops halfway leaves `.part` files,
+ * which the next start removes, and a build set aside, which it puts back or
+ * removes.
  *
  * The diarizer is three downloads kept as one directory: a sherpa-onnx build,
  * of which only the members the list names are kept, the segmentation model,
@@ -29,6 +31,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { chmod, mkdir, open, rename, rm, rmdir, stat } from 'node:fs/promises';
 import { dirname, join, posix, resolve } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { thisSystem, type Download, type Downloads, type Format } from './downloads.ts';
 import { badInput, sentenceFor } from './mcp.ts';
 import {
@@ -366,21 +369,46 @@ async function putInPlace(part: string, kept: string, save: () => void): Promise
     () => true,
     () => false,
   );
-  if (had) await rename(kept, aside);
+  if (had) await renameHeld(kept, aside);
   try {
-    await rename(part, kept);
+    await renameHeld(part, kept);
   } catch (fault) {
-    if (had) await rename(aside, kept);
+    if (had) await renameHeld(aside, kept);
     throw fault;
   }
   try {
     save();
   } catch (fault) {
     await rm(kept, { recursive: true, force: true });
-    if (had) await rename(aside, kept);
+    if (had) await renameHeld(aside, kept);
     throw fault;
   }
   await rm(aside, { recursive: true, force: true });
+}
+
+/** The codes Windows gives a rename while a program runs from the path or a scanner holds it. */
+const HELD = new Set(['EPERM', 'EBUSY', 'EACCES']);
+
+/** How many times a held rename is tried, and the wait before the next try. */
+const HELD_TRIES = 5;
+const HELD_WAIT_MS = 200;
+
+/**
+ * Rename, and try again a few times while the path is held. On Windows a
+ * whisper-cli.exe that still runs from the build, or an antivirus that reads
+ * a new file, holds it for a short time; a rename that still fails after the
+ * last try throws as it would have.
+ */
+async function renameHeld(from: string, to: string): Promise<void> {
+  for (let tries = 1; ; tries += 1) {
+    try {
+      return await rename(from, to);
+    } catch (fault) {
+      const code = (fault as NodeJS.ErrnoException).code ?? '';
+      if (!HELD.has(code) || tries === HELD_TRIES) throw fault;
+      await delay(HELD_WAIT_MS);
+    }
+  }
 }
 
 /**
