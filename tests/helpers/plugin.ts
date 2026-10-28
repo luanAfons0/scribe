@@ -84,6 +84,8 @@ export type StartOptions = {
   readonly directory?: string;
   /** Start the `sh` wrapper `mcp` instead, as the Host does in a `wsl` Place. */
   readonly wrapper?: boolean;
+  /** Run this file instead of `mcp.ts`, such as the `mcp.js` of a Plugin Release. */
+  readonly entry?: string;
 };
 
 /** A question the Plugin Server put to the Host over the Tool Bus. */
@@ -158,7 +160,7 @@ export async function startPluginServer(
   const directory = options.directory ?? (await makeDirectory(t));
 
   const [program, args] =
-    options.wrapper === true ? [WRAPPER, []] : [process.execPath, [ENTRY]];
+    options.wrapper === true ? [options.entry ?? WRAPPER, []] : [process.execPath, [options.entry ?? ENTRY]];
   const child = spawn(program, args, {
     cwd: directory,
     env: { ...process.env, ...SETTINGS, ...options.env },

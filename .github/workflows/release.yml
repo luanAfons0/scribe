@@ -1,0 +1,20 @@
+# Publish a Plugin Release on a tag `vMAJOR.MINOR.PATCH`. The work is
+# FirstMate's reusable workflow (ADR-0033, FirstMate's Plugin guide): it tests,
+# builds `release/` and uploads it with its `.sha256`. It is called at `@main`,
+# because a called workflow cannot find its own ref.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  release:
+    uses: luanAfons0/FirstMate/.github/workflows/plugin-release.yml@main
+    # The workflow creates the GitHub Release, so it needs this and nothing more.
+    permissions:
+      contents: write
+    with:
+      test: npm ci && npm run check
+      build: npm run release

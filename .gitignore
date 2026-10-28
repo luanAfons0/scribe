@@ -24,3 +24,6 @@ downloads/
 
 # The approved design mocks. They are published, and they are not source.
 .impeccable/
+
+# The Plugin Release the release build writes.
+release/
